@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.analytics.valuation import compute_deterministic_valuation_dossier
 from app.companion.screen_ocr import screen_companion
@@ -178,6 +178,20 @@ from app.connectors.amfi_connector import amfi_connector, AMFINavRecord
 from app.schemas.semantics import FieldLineageRecord, RecommendationReadinessGate
 from app.schemas.ipo import IPODossier
 from app.schemas.funds import FundComparisonResult, PortfolioAllocationPlan
+from app.trading.engine import (
+    backtest_engine,
+    BacktestExecutionResult,
+    DeterministicBacktestEngine,
+    DualMovingAverageStrategy,
+    BuyAndHoldStrategy,
+)
+from app.trading.costs import IndianTransactionCostModel
+from app.trading.fixtures import (
+    RELIANCE_SERIES,
+    TCS_BONUS_SERIES,
+    NIFTY50_BENCHMARK_SERIES,
+)
+from app.schemas.historical_data import validate_historical_series
 
 
 @app.get("/api/v1/sources")
@@ -287,6 +301,79 @@ async def allocate_portfolio_endpoint(req: AllocationRequest) -> PortfolioAlloca
         horizon_years=req.horizon_years,
         risk_profile=req.risk_profile,
     )
+
+
+class BacktestRunRequest(BaseModel):
+    symbol: str = "RELIANCE"
+    strategy: str = "DualMovingAverage"
+    parameters: Dict[str, Any] = Field(default_factory=lambda: {"fast_period": 10, "slow_period": 30, "quantity": 10})
+    initial_capital: float = 100000.0
+    slippage_bps: float = 5.0
+
+
+@app.get("/api/v1/backtest/strategies")
+async def list_backtest_strategies():
+    """Lists available deterministic strategies with parameter specifications."""
+    return [
+        {
+            "id": "DualMovingAverage",
+            "name": "Dual Moving Average Crossover",
+            "description": "Trend-following strategy generating signals when fast SMA crosses slow SMA. Next-bar execution (T+1 Open).",
+            "default_parameters": {"fast_period": 10, "slow_period": 30, "quantity": 10},
+        },
+        {
+            "id": "BuyAndHold",
+            "name": "Buy & Hold Benchmark",
+            "description": "Allocates once on first eligible bar and holds throughout simulation for passive benchmark comparison.",
+            "default_parameters": {"quantity": 10},
+        },
+    ]
+
+
+@app.get("/api/v1/backtest/fixtures")
+async def list_backtest_fixtures():
+    """Lists validated historical OHLCV bar fixtures available for deterministic replay."""
+    return [
+        {"symbol": "RELIANCE", "bars_count": len(RELIANCE_SERIES), "corporate_actions": "Interim Dividend ₹10", "classification": "HISTORICAL_VERIFIED"},
+        {"symbol": "TCS", "bars_count": len(TCS_BONUS_SERIES), "corporate_actions": "1:1 Bonus Issue", "classification": "HISTORICAL_VERIFIED"},
+        {"symbol": "NIFTY50_INDEX", "bars_count": len(NIFTY50_BENCHMARK_SERIES), "corporate_actions": "None (Benchmark Index)", "classification": "HISTORICAL_VERIFIED"},
+    ]
+
+
+@app.post("/api/v1/backtest/run", response_model=BacktestExecutionResult)
+async def run_backtest_endpoint(req: BacktestRunRequest) -> BacktestExecutionResult:
+    """Executes deterministic, event-driven backtest with statutory Indian transaction costs."""
+    # Match historical series fixture
+    clean_sym = req.symbol.strip().upper()
+    if "TCS" in clean_sym:
+        bars = TCS_BONUS_SERIES
+    else:
+        bars = RELIANCE_SERIES
+
+    # Configure Strategy
+    strat_id = req.strategy.strip()
+    if strat_id in ["DualMovingAverage", "DualMovingAverageCrossover"]:
+        strategy = DualMovingAverageStrategy(
+            fast_period=req.parameters.get("fast_period", 10),
+            slow_period=req.parameters.get("slow_period", 30),
+            quantity=req.parameters.get("quantity", 10),
+        )
+    elif strat_id in ["BuyAndHold", "BuyAndHoldBenchmark"]:
+        strategy = BuyAndHoldStrategy(quantity=req.parameters.get("quantity", 10))
+    else:
+        raise HTTPException(status_code=400, detail=f"Unsupported strategy '{req.strategy}'")
+
+    # Cost model with requested slippage
+    cost_model = IndianTransactionCostModel(slippage_bps=req.slippage_bps)
+    custom_engine = DeterministicBacktestEngine(cost_model=cost_model)
+
+    result = custom_engine.run_backtest(
+        strategy=strategy,
+        bars=bars,
+        initial_capital=req.initial_capital,
+        benchmark_bars=NIFTY50_BENCHMARK_SERIES,
+    )
+    return result
 
 
 @app.get("/api/v1/export/report")

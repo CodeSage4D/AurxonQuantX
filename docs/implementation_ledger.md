@@ -88,12 +88,25 @@
   - **Frontend Transparency (Workstream H):** Added statutory filing lineage inspector, recommendation readiness gate cards, and typed null-safe valuation displays in React interface.
   - **Release Suite:** 80 passing automated backend tests in 1.63s; clean production frontend build in 2.37s.
 
+### Milestone: Phase 3, Stage 1 — Deterministic Backtesting Engine
+- **Commit:** `[Current Phase 3 Stage 1 Commit]`
+- **Date:** 2026-10-13
+- **Delivered Capabilities:**
+  - **Historical Market Data Contract (`HistoricalSeriesContract`):** Strongly-typed OHLCV data validation preventing low > high anomalies, timestamp sequencing errors, missing bars, and ambiguous adjustments. Explicit classification of real vs benchmark fixture vs synthetic data.
+  - **Deterministic Event-Driven Engine (`DeterministicBacktestEngine`):** Strictly enforces next-bar execution (orders generated on bar $T$ Close execute at bar $T+1$ Open). Bit-exact deterministic replay verified across 10 identical runs. Lookahead leakage structurally blocked.
+  - **Indian Statutory Transaction Cost Model (`IndianTransactionCostModel`):** Accurate statutory rate calculation: STT (0.1% buy/sell delivery), Stamp Duty (0.015% buy only), NSE transaction charges (0.00297%), SEBI turnover fees (₹10/Cr), GST (18% on fees), and configurable slippage.
+  - **Corporate Actions Engine:** Cash dividends credited to balance without phantom adjustments; stock splits and bonus distributions scale share counts and inversely scale average cost without double-adjusting price feeds.
+  - **Quantitative Performance & Risk Metrics (`calculate_backtest_metrics`):** Gross vs Net returns, CAGR, Maximum Drawdown, Sharpe & Sortino ratios (calibrated to Indian risk-free rate $R_f = 6.5\%$). Null-safe edge case handling for zero volatility and zero trades.
+  - **Audit Ledger Chaining:** Automated recording of every backtest run (parameter hash, dataset hash, performance metrics) into SQLite WAL `audit_chain` using sequential SHA-256 tamper-evident hashing.
+  - **REST API Endpoints:** Strategy catalogue, fixture catalogue, and simulation execution endpoints added to FastAPI surface (`/api/v1/backtest/*`).
+  - **Release Suite:** 96 passing automated backend tests in 1.62s; clean production frontend build in 2.06s.
+
 ---
 
 ## 4. Test Matrix Summary
 
 ```
-======================== 80 passed, 1 warning in 1.63s =========================
+======================== 96 passed, 1 warning in 1.62s =========================
 - test_api_endpoints.py: 11 passed (Health, Quote, Sync, Audit Records, Integrity, Companion, Sources, IPO, Funds, Export, Ingestion Upload)
 - test_audit_ledger.py: 2 passed (Sequential Hash-Chaining, Tampering Detection)
 - test_document_ingestion.py: 2 passed (Text/HTML Ingestion with Prompt Injection, Empty/Corrupt PDF Handling)
@@ -106,6 +119,7 @@
 - test_phase_2_1_fund_math.py: 5 passed (CAGR Reference, Direct Savings, Tracking Error Tolerance, Overlap Math, Benchmark Alignment)
 - test_phase_2_1_ipo_math.py: 5 passed (Issue Structure & Dilution, Promoter Bounds, CAGR Limits, Negative EPS, Bajaj Cross-Check)
 - test_phase_2_2_semantics_and_connectors.py: 14 passed (Negative/Zero/Missing EPS, CAGR Semantics, AMFI Parser & Lookup, IPO Lineage, Readiness Gates, Endpoints)
+- test_phase_3_stage_1_backtesting.py: 16 passed (Data Contract Validation, Next-Bar Execution, Statutory Costs, Corporate Actions, Deterministic Replay, Ledger Chaining, REST API)
 - test_screen_ocr.py: 3 passed (Symbol Detection, Privacy Redaction, Pause Control)
 - test_source_registry.py: 2 passed (Default Sources Registered, Custom Source Registration)
 - test_valuation.py: 8 passed (Graham, DCF, Sensitivity Matrix, Bank Exclusion, Piotroski, Altman Z, Risk Metrics, Dossier)
@@ -115,10 +129,11 @@
 
 ## 5. Unresolved Risks & Next Phase Roadmap
 
-1. **Unresolved Risks:**
+1. **Unresolved Risks & Status:**
+   - **Empirical Equity OHLCV Data:** AMFI connector provides mutual fund NAVs, not equity OHLCV. Equity backtesting on uncurated tickers is **BLOCKED** until licensed Bhavcopy/tick feed connector is implemented. Benchmark fixtures (`RELIANCE`, `TCS`, `NIFTY50`) are fully verified.
    - **External LLM Credentials:** `OPENAI_API_KEY` and `GROQ_API_KEY` remain optional. System operates reliably in offline demonstration/heuristic mode.
-   - **Multi-Page Scanned PDF OCR:** Ingestion pipeline supports searchable PDFs. Scanned image-only PDFs return explicit diagnostic failure messages; full optical OCR pipeline deferred to Phase 4 toolchain enhancements.
-2. **Next Milestone (Phase 3):**
-   - Trading research & historical backtesting module.
-   - Portfolio factor attribution and multi-asset risk parity modeling.
-   - Cross-asset correlation stress testing under historical Indian market dislocations (2008, 2020).
+   - **Real-Money Trading:** Strictly disabled (`ENABLE_REAL_TRADING = false`). Live broker order execution is prohibited.
+2. **Next Milestone (Phase 3, Stage 2):**
+   - Paper-trading execution simulation and virtual broker ledger.
+   - Multi-asset portfolio rebalancing and allocation modeling.
+   - Factor attribution and risk parity engine under Indian market stress scenarios.
