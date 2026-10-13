@@ -120,6 +120,26 @@ interface ResolutionResult {
   clarification_prompt?: string;
 }
 
+const getClassificationBadge = (classification: string) => {
+  switch (classification) {
+    case 'LIVE_VERIFIED':
+      return { bg: 'bg-emerald-500/15', text: 'text-emerald-400', border: 'border-emerald-500/30', label: 'LIVE VERIFIED' };
+    case 'DELAYED_VERIFIED':
+      return { bg: 'bg-amber-500/15', text: 'text-amber-400', border: 'border-amber-500/30', label: 'DELAYED (15m)' };
+    case 'HISTORICAL_VERIFIED':
+      return { bg: 'bg-cyan-500/15', text: 'text-cyan-400', border: 'border-cyan-500/30', label: 'HISTORICAL VERIFIED' };
+    case 'CACHED':
+      return { bg: 'bg-blue-500/15', text: 'text-blue-400', border: 'border-blue-500/30', label: 'LOCAL CACHED' };
+    case 'SYNTHETIC_BENCHMARK':
+      return { bg: 'bg-purple-500/15', text: 'text-purple-400', border: 'border-purple-500/30', label: 'BENCHMARK ARCHIVE' };
+    case 'SIMULATED':
+      return { bg: 'bg-orange-500/15', text: 'text-orange-400', border: 'border-orange-500/30', label: 'SIMULATED' };
+    case 'UNAVAILABLE':
+    default:
+      return { bg: 'bg-red-500/15', text: 'text-red-400', border: 'border-red-500/30', label: classification || 'UNAVAILABLE' };
+  }
+};
+
 export const CompanyResearchView: React.FC = () => {
   const [query, setQuery] = useState('TCS');
   const [report, setReport] = useState<CompanyResearchReport | null>(null);
@@ -285,12 +305,21 @@ export const CompanyResearchView: React.FC = () => {
                 <div className="text-xs text-secondary mt-1">
                   {report.company.legal_name} • {report.company.sector} ({report.company.industry})
                 </div>
-                <div className="flex items-center gap-2 mt-3 text-[11px] text-muted">
-                  <span>Provenance: <strong className="text-secondary">{report.data_classification}</strong></span>
+                <div className="flex flex-wrap items-center gap-2 mt-3 text-[11px] text-muted">
+                  {(() => {
+                    const badge = getClassificationBadge(report.data_classification);
+                    return (
+                      <span className={`px-2 py-0.5 rounded border text-[10px] font-mono font-bold ${badge.bg} ${badge.text} ${badge.border}`}>
+                        {badge.label}
+                      </span>
+                    );
+                  })()}
                   <span>•</span>
                   <span>Freshness: <strong className="text-emerald-500">{report.data_freshness}</strong></span>
                   <span>•</span>
                   <span>As of: {new Date(report.as_of_timestamp).toLocaleDateString()}</span>
+                  <span>•</span>
+                  <span>Retrieved: {new Date(report.retrieval_timestamp).toLocaleTimeString()}</span>
                 </div>
               </div>
 

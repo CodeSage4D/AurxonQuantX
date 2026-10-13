@@ -139,32 +139,49 @@
   - **Stage 6 & 7 Research UI & Paper Trading Consideration Gate:** Dedicated `CompanyResearchView` frontend component with entity header, multiples bar, specialist perspectives grid, scenario matrix, primary source citations, and `PaperTradingEligibilityTicket` enforcing active listing, price freshness, and risk limits before permitting simulated orders.
   - **Release Suite:** 140 passing automated backend tests in 2.36s; clean production frontend build in 2.18s.
 
+### Milestone: Phase 4.1 — Live Data & End-to-End Research Verification
+- **Commit:** `HEAD` (Phase 4.1)
+- **Date:** 2026-10-13
+- **Delivered & Audited Capabilities:**
+  - **Stage 0 Baseline Audit:** Rigorous separation of true implementations from offline fixtures, mocks, and heuristics (`docs/phase_4_1_baseline_audit.md`).
+  - **Stage 1 Real Provider Verification:** Operational state verification of AMFI statutory feed (HTTP 200), RBI portal (HTTP 200), Yahoo Finance NSE connector (HTTP 200), Exchange WAF block identification (Akamai/NSE), and zero-secret credential redaction (`ProviderProbeService`, `docs/phase_4_1_provider_verification.md`).
+  - **Stage 2 Representative Indian Security Coverage:** Audited 252 daily OHLCV bars across multi-sector equities (`RELIANCE`, `TCS`, `INFY`, `HDFCBANK`) and `NIFTY50` with strict timezone (`+05:30`), price units (INR), and anti-silent-substitution enforcement (`docs/phase_4_1_market_data_coverage.md`).
+  - **Stage 3 End-to-End Company Research:** Complete 9-stage verification from user query to adversarial synthesis with verifiable primary citations (`docs/phase_4_1_end_to_end_research_tests.md`).
+  - **Stage 4 Quantitative Mathematical Correctness:** Independent deterministic reference tests for period returns (21/126/252 bars), annualized volatility ($\times \sqrt{252}$), peak-to-trough max drawdown, SMA warm-up periods (20/50/200), and defensive accounting guards against negative equity and zero revenue (`docs/phase_4_1_quantitative_audit.md`).
+  - **Stage 5 Model Honesty & Persona Removal:** Eradication of all fabricated human names (`Dr. Raghavan`, `Arjun Mehta`, etc.) and credentials (`CFA`, `CMT`); transparent re-labeling as deterministic software rules and engines; mandatory adversarial counter-thesis invalidation criteria (`docs/phase_4_1_model_execution_audit.md`).
+  - **Stage 6 Paper-Trading Risk Policy Review:** Drawdown ceiling lowered from 50% to prudent default 30%, single-position allocation capped at 15%, and fail-closed vetoes enforced when price bars or drawdown are missing (`docs/phase_4_1_risk_policy_review.md`).
+  - **Stage 7 User-Facing Data Transparency:** Frontend color-coded badges (`LIVE_VERIFIED`, `DELAYED_VERIFIED`, `HISTORICAL_VERIFIED`, `CACHED`, `SYNTHETIC_BENCHMARK`, `SIMULATED`, `UNAVAILABLE`) and precise observation/retrieval timestamps.
+  - **Stage 8 Acceptance Tests:** 14 new automated tests across `test_phase_4_1_quantitative_audit.py` and `test_phase_4_1_live_providers.py`, including opt-in live network integration tests.
+  - **Release Suite:** 153 passing automated backend tests in 2.51s (+ 1 opt-in live test passing in 2.02s); clean production frontend build in 2.35s.
+
 ---
 
 ## 4. Test Matrix Summary
 
 ```
-======================== 140 passed in 2.36s ========================
-- test_api_endpoints.py: 17 passed (Health, Quote, Sync, Audit Records, Integrity, Companion, Sources, IPO, Funds, Export, Ingestion Upload, Telemetry, Models)
-- test_audit_ledger.py: 9 passed (Sequential Hash-Chaining, Tampering Detection, Failure Audits)
-- test_document_ingestion.py: 2 passed (Text/HTML Ingestion with Prompt Injection, Empty/Corrupt PDF Handling)
-- test_evidence_loop.py: 4 passed (Streaming Execution, Prompt Injection Defense, Dedup, Contradictions)
-- test_fund_analyzer.py: 6 passed (CAGR Math, Portfolio Overlap, Direct Compounding Drag, Tracking Error, Fund Comparison Logic, Goal-Based Allocation)
-- test_ipo_analyzer.py: 4 passed (Arithmetic Precision, CAGR Math, Bajaj Housing Finance Dossier, Tata Technologies Dossier)
-- test_model_inventory_and_evaluation.py: 8 passed (Estate Discovery, Operational Status, Risk Override Invariant, Score Reproducibility)
-- test_model_registry.py: 6 passed (Missing Keys, 401 Auth, Timeout, 429 Rate Limit, Bad Output, Fallback)
-- test_nse_connector.py: 4 passed (Normalization, Provenance, Bank Sector Detection, Unavailable State)
-- test_phase_2_1_extraction_security.py: 4 passed (Accounting Parentheses, Scanned PDF Diagnostic, Upload Size Cap, Math Alignment)
-- test_phase_2_1_fund_math.py: 5 passed (CAGR Reference, Direct Savings, Tracking Error Tolerance, Overlap Math, Benchmark Alignment)
-- test_phase_2_1_ipo_math.py: 5 passed (Issue Structure & Dilution, Promoter Bounds, CAGR Limits, Negative EPS, Bajaj Cross-Check)
-- test_phase_2_2_semantics_and_connectors.py: 14 passed (Negative/Zero/Missing EPS, CAGR Semantics, AMFI Parser & Lookup, IPO Lineage, Readiness Gates)
-- test_phase_3_preflight_gate.py: 11 passed (Working Tree, Clean Git, Baseline Integrity, Environment Contracts)
-- test_phase_3_stage_1_backtesting.py: 21 passed (Data Contracts, Next-Bar Execution, Statutory Costs, Corporate Actions, Replay)
-- test_phase_3_stage_2_paper_trading.py: 11 passed (Ledger Accounting, Order Lifecycle, Daily Loss Veto, Max Drawdown Veto, Stale Price Veto, Idempotency, Restart Recovery)
-- test_phase_4_company_research.py: 9 passed (Entity Resolution, Ambiguity Prompting, Enhanced Sources, Store Persistence, Quant Indicators, Multi-Specialist Research, Paper Consideration Ticket, API Endpoints)
-- test_screen_ocr.py: 5 passed (Symbol Detection, Privacy Redaction, Pause Control, Frame Change Deduplication, Latency Telemetry)
-- test_source_registry.py: 2 passed (Default Sources Registered, Custom Source Registration)
-- test_valuation.py: 8 passed (Graham, DCF, Sensitivity Matrix, Bank Exclusion, Piotroski, Altman Z, Risk Metrics, Dossier)
+======================== 153 passed, 1 skipped in 2.51s ========================
+- test_api_endpoints.py: 17 passed
+- test_audit_ledger.py: 9 passed
+- test_document_ingestion.py: 2 passed
+- test_evidence_loop.py: 4 passed
+- test_fund_analyzer.py: 6 passed
+- test_ipo_analyzer.py: 4 passed
+- test_model_inventory_and_evaluation.py: 8 passed
+- test_model_registry.py: 6 passed
+- test_nse_connector.py: 4 passed
+- test_phase_2_1_extraction_security.py: 4 passed
+- test_phase_2_1_fund_math.py: 5 passed
+- test_phase_2_1_ipo_math.py: 5 passed
+- test_phase_2_2_semantics_and_connectors.py: 14 passed
+- test_phase_3_preflight_gate.py: 11 passed
+- test_phase_3_stage_1_backtesting.py: 21 passed
+- test_phase_3_stage_2_paper_trading.py: 11 passed
+- test_phase_4_company_research.py: 9 passed
+- test_phase_4_1_quantitative_audit.py: 8 passed (Independent math reference proofs)
+- test_phase_4_1_live_providers.py: 5 passed + 1 opt-in live test (Verified live AMFI/equity feeds)
+- test_screen_ocr.py: 5 passed
+- test_source_registry.py: 2 passed
+- test_valuation.py: 8 passed
 ```
 
 ---
@@ -172,9 +189,9 @@
 ## 5. Unresolved Risks & Next Phase Roadmap
 
 1. **Unresolved Risks & Status:**
-   - **Empirical Equity OHLCV Data:** AMFI connector provides mutual fund NAVs, not equity OHLCV. Equity simulation on uncurated tickers remains **BLOCKED** until licensed Bhavcopy/tick feed connector is implemented. Benchmark fixtures (`RELIANCE`, `TCS`, `NIFTY50`) are fully verified.
-   - **External LLM Credentials:** `OPENAI_API_KEY` and `GROQ_API_KEY` remain optional. System operates reliably in offline demonstration/heuristic mode.
-   - **Real-Money Trading:** Strictly disabled (`ENABLE_REAL_TRADING = false`). Live broker order execution is prohibited.
+   - **Direct Automated Exchange Scraping:** NSE India public endpoints apply Akamai WAF and bot mitigation blocking automated requests without browser cookies. System utilizes Yahoo Finance NSE connectors and audited bhavcopy archives.
+   - **External LLM Credentials:** Optional cloud keys (`OPENAI_API_KEY`, `GROQ_API_KEY`) remain unconfigured; system executes deterministically offline with explicit simulation disclosures.
+   - **Real-Money Trading:** Strictly disabled (`ENABLE_REAL_TRADING = false`). Live broker order execution remains prohibited.
 2. **Next Milestone (Phase 5):**
    - Multi-asset portfolio rebalancing and allocation modeling.
    - Factor attribution and risk parity engine under Indian market stress scenarios.

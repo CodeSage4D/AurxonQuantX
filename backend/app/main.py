@@ -611,6 +611,14 @@ async def list_enhanced_sources_endpoint() -> List[EnhancedSourceMetadata]:
     return enhanced_source_registry.list_sources()
 
 
+@app.get("/api/v1/company/sources/probe")
+async def probe_sources_endpoint() -> List[Dict[str, Any]]:
+    """Actively probes registered external providers and returns real operational health states."""
+    from app.sources.provider_probe import provider_probe_service
+    reports = provider_probe_service.probe_all()
+    return [r.model_dump() for r in reports]
+
+
 @app.get("/api/v1/company/research/{query}", response_model=ComprehensiveCompanyResearchReport)
 async def get_company_research_endpoint(query: str) -> ComprehensiveCompanyResearchReport:
     """Generates an evidence-backed company research report with specialist perspectives and paper trading ticket."""
@@ -618,6 +626,7 @@ async def get_company_research_endpoint(query: str) -> ComprehensiveCompanyResea
         return company_researcher.conduct_research(query)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
 
 
 @app.post("/api/v1/company/research", response_model=ComprehensiveCompanyResearchReport)
