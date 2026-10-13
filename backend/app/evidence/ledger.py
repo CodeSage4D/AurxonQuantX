@@ -221,7 +221,60 @@ class AuditLedger:
 
         return chained_hash
 
+    def record_company_research_event(
+        self,
+        audit_id: str,
+        ticker: str,
+        query: str,
+        current_price: float,
+        payload_dict: Dict[str, Any],
+    ) -> str:
+        """Appends company research audit record into the cryptographic hash chain."""
+        payload_str = json.dumps(payload_dict, sort_keys=True)
+        content_hash = hashlib.sha256(payload_str.encode("utf-8")).hexdigest()
+        now_iso = datetime.now(timezone.utc).isoformat()
+
+        with sqlite3.connect(self.db_path, timeout=10.0) as conn:
+            conn.execute("PRAGMA busy_timeout=5000;")
+            conn.isolation_level = "EXCLUSIVE"
+            last_seq, prev_hash = self._get_latest_chained_hash(conn)
+            next_seq = last_seq + 1
+
+            chain_preimage = f"{next_seq}:{prev_hash}:{content_hash}:{now_iso}"
+            chained_hash = hashlib.sha256(chain_preimage.encode("utf-8")).hexdigest()
+
+            conn.execute(
+                """
+                INSERT INTO audit_chain (
+                    sequence_id, audit_id, ticker, query, recommendation, current_price,
+                    fair_value_dcf, graham_number, evidence_score, uncertainty_level,
+                    payload_json, prev_hash, content_sha256, chained_hash, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    next_seq,
+                    audit_id,
+                    ticker.upper(),
+                    query,
+                    "COMPANY_RESEARCH_DOSSIER",
+                    current_price,
+                    payload_dict.get("fair_value_dcf"),
+                    payload_dict.get("graham_number", 0.0),
+                    1.0,
+                    "DETERMINISTIC_RESEARCH",
+                    payload_str,
+                    prev_hash,
+                    content_hash,
+                    chained_hash,
+                    now_iso,
+                ),
+            )
+            conn.commit()
+
+        return chained_hash
+
     def verify_chain_integrity(self) -> Tuple[bool, int, Optional[str]]:
+
         """Verifies the mathematical integrity of the entire cryptographic chain from genesis to head.
 
         Returns:

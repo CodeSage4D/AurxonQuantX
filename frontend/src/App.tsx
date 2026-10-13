@@ -13,6 +13,7 @@ import { IPOResearchView } from './components/IPOResearchView';
 import { FundResearchView } from './components/FundResearchView';
 import { PaperTradingView } from './components/PaperTradingView';
 import { ModelInventoryView } from './components/ModelInventoryView';
+import { CompanyResearchView } from './components/CompanyResearchView';
 import { SourcesInspectionModal } from './components/SourcesInspectionModal';
 import {
   Activity,
@@ -33,8 +34,9 @@ import {
   Laptop,
 } from 'lucide-react';
 
-type TabView = 'EQUITIES' | 'IPO' | 'MUTUAL_FUNDS' | 'PAPER_TRADING' | 'MODELS';
+type TabView = 'EQUITIES' | 'COMPANY_RESEARCH' | 'IPO' | 'MUTUAL_FUNDS' | 'PAPER_TRADING' | 'MODELS';
 type ThemePreference = 'GLACIER' | 'NEON' | 'SYSTEM';
+
 
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabView>('EQUITIES');
@@ -181,7 +183,16 @@ export const App: React.FC = () => {
           </button>
           <button
             type="button"
+            className={`chip-btn ${activeTab === 'COMPANY_RESEARCH' ? 'active' : ''}`}
+            onClick={() => setActiveTab('COMPANY_RESEARCH')}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+          >
+            <Building size={14} /> Company Research
+          </button>
+          <button
+            type="button"
             className={`chip-btn ${activeTab === 'IPO' ? 'active' : ''}`}
+
             onClick={() => setActiveTab('IPO')}
             style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
           >
@@ -381,8 +392,16 @@ export const App: React.FC = () => {
         </main>
       )}
 
+      {/* Tab: Company Research & Intelligence */}
+      {activeTab === 'COMPANY_RESEARCH' && (
+        <main style={{ padding: '24px', maxWidth: '1400px', margin: '0 auto', width: '100%' }}>
+          <CompanyResearchView />
+        </main>
+      )}
+
       {/* Tab: IPO Intelligence */}
       {activeTab === 'IPO' && (
+
         <main style={{ padding: '24px', maxWidth: '1300px', margin: '0 auto', width: '100%' }}>
           <IPOResearchView />
         </main>

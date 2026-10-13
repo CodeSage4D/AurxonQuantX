@@ -21,10 +21,23 @@ from app.market_data.nse_connector import NSEDataConnector
 from app.model_adapters.inventory import model_inventory_manager
 from app.model_adapters.registry import model_registry
 from app.orchestration.evidence_loop import evidence_loop_workflow
+from app.research.company_resolver import company_resolver
+from app.research.company_researcher import company_researcher
+from app.schemas.company import (
+    CompanyResolutionResult,
+    ComprehensiveCompanyResearchReport,
+    EnhancedSourceMetadata,
+)
 from app.schemas.research import (
     ResearchFinding,
     ResearchObjective,
 )
+from app.sources.enhanced_registry import enhanced_source_registry
+
+
+class CompanyResearchRequest(BaseModel):
+    query: str
+
 
 
 @asynccontextmanager
@@ -580,4 +593,39 @@ async def apply_paper_corporate_action_endpoint(req: PaperCorporateActionRequest
 async def reset_paper_portfolio_endpoint(portfolio_id: str = "DEFAULT", initial_cash: float = 1000000.0) -> PaperPortfolioState:
     """Resets the virtual paper portfolio to initial cash for testing/demo scenarios."""
     return paper_manager.reset_portfolio(portfolio_id=portfolio_id, initial_cash=initial_cash)
+
+
+# ============================================================================
+# PHASE 4: COMPANY RESEARCH & SOURCE REGISTRY ENDPOINTS
+# ============================================================================
+
+@app.get("/api/v1/company/resolve", response_model=CompanyResolutionResult)
+async def resolve_company_endpoint(q: str = Query(..., description="Company name, ticker, or ISIN")) -> CompanyResolutionResult:
+    """Resolves a company query against canonical security master with ambiguity detection."""
+    return company_resolver.resolve(q)
+
+
+@app.get("/api/v1/company/sources", response_model=List[EnhancedSourceMetadata])
+async def list_enhanced_sources_endpoint() -> List[EnhancedSourceMetadata]:
+    """Lists permitted data sources with health state, quotas, update intervals, and licenses."""
+    return enhanced_source_registry.list_sources()
+
+
+@app.get("/api/v1/company/research/{query}", response_model=ComprehensiveCompanyResearchReport)
+async def get_company_research_endpoint(query: str) -> ComprehensiveCompanyResearchReport:
+    """Generates an evidence-backed company research report with specialist perspectives and paper trading ticket."""
+    try:
+        return company_researcher.conduct_research(query)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/v1/company/research", response_model=ComprehensiveCompanyResearchReport)
+async def post_company_research_endpoint(req: CompanyResearchRequest) -> ComprehensiveCompanyResearchReport:
+    """Generates an evidence-backed company research report from POST payload."""
+    try:
+        return company_researcher.conduct_research(req.query)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
 
