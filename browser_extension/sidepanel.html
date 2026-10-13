@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>AURXON Market Companion</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 16px;
+      background: #0d121c;
+      color: #f0f4fc;
+      font-family: 'Inter', -apple-system, sans-serif;
+      font-size: 13px;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid #1e293b;
+      padding-bottom: 10px;
+      margin-bottom: 14px;
+    }
+    .title {
+      font-weight: 700;
+      color: #38bdf8;
+      letter-spacing: 0.05em;
+    }
+    .badge {
+      font-size: 10px;
+      background: rgba(56, 189, 248, 0.15);
+      color: #38bdf8;
+      padding: 2px 6px;
+      border-radius: 4px;
+      border: 1px solid rgba(56, 189, 248, 0.3);
+    }
+    .card {
+      background: #141b29;
+      border: 1px solid #1e293b;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+    .btn {
+      width: 100%;
+      background: linear-gradient(135deg, #2563eb, #0284c7);
+      color: white;
+      border: none;
+      padding: 8px;
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="title">AURXON COMPANION</div>
+    <div class="badge">CHROME V3</div>
+  </div>
+
+  <div class="card">
+    <div style="font-size: 11px; color: #94a3b8; margin-bottom: 6px;">DETECTED CONTEXT</div>
+    <div id="ticker" style="font-size: 16px; font-weight: 700; color: #38bdf8; font-family: monospace;">AWAITING ACTIVE TAB...</div>
+  </div>
+
+  <div class="card">
+    <div style="font-size: 11px; color: #10b981; margin-bottom: 6px;">✓ PRIVACY ENFORCEMENT</div>
+    <div style="color: #cbd5e1; font-size: 12px; line-height: 1.4;">
+      Never collects passwords, broker OTPs, or active banking sessions.
+    </div>
+  </div>
+
+  <button class="btn" id="openHubBtn">Launch Research in AURXON Hub</button>
+
+  <script>
+    chrome.storage.local.get(['lastDetectedTicker'], function(result) {
+      if (result.lastDetectedTicker) {
+        document.getElementById('ticker').innerText = result.lastDetectedTicker;
+      }
+    });
+    document.getElementById('openHubBtn').addEventListener('click', () => {
+      window.open('http://127.0.0.1:5173', '_blank');
+    });
+  </script>
+</body>
+</html>

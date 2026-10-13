@@ -1,0 +1,35 @@
+{
+  "manifest_version": 3,
+  "name": "AURXON Market Companion",
+  "version": "1.0.0",
+  "description": "Founder-operated side panel companion for Indian market research and ticker extraction.",
+  "permissions": [
+    "sidePanel",
+    "activeTab",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://*.nseindia.com/*",
+    "https://*.bseindia.com/*",
+    "https://*.screener.in/*",
+    "https://*.moneycontrol.com/*"
+  ],
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.nseindia.com/*",
+        "https://*.bseindia.com/*",
+        "https://*.screener.in/*",
+        "https://*.moneycontrol.com/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
