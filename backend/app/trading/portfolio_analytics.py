@@ -230,9 +230,9 @@ class PortfolioAnalyticsEngine:
         f_high = npv(high)
 
         if f_low * f_high > 0:
-            # Root bracket not found; return simple annualized return
-            years = max(total_days / 365.0, 1.0 / 365.0)
-            return round(((final_equity / initial_cash) ** (1.0 / years) - 1.0) * 100.0, 2)
+            # Bracket failure: no single root exists in the realistic [-90%, +500%] search interval.
+            # Return None to transparently indicate that IRR is undefined or out-of-bounds for these cash flows.
+            return None
 
         for _ in range(60):
             mid = (low + high) / 2.0
@@ -372,11 +372,32 @@ class PortfolioAnalyticsEngine:
         downside_dev = math.sqrt(sum(downside_sq) / max(1, len(daily_rets)))
         sortino = round(((daily_mean - rf_daily) / downside_dev) * math.sqrt(252), 2) if downside_dev > 1e-4 else None
 
-        # Benchmark Tracking (if benchmark series provided)
-        bm_stats = self.calculate_tracking_error_and_benchmark_metrics(
-            portfolio_returns=daily_rets,
-            benchmark_returns=benchmark_returns if benchmark_returns else [0.0005] * len(daily_rets),
-        )
+        # Benchmark Tracking (resolved from market data store if not explicitly passed)
+        resolved_bm_returns = benchmark_returns
+        if not resolved_bm_returns and len(daily_rets) >= 5:
+            resolved_bm_returns = self.get_benchmark_returns(len(daily_rets))
+
+        if resolved_bm_returns and len(resolved_bm_returns) == len(daily_rets) and len(daily_rets) >= 5:
+            bm_stats = self.calculate_tracking_error_and_benchmark_metrics(
+                portfolio_returns=daily_rets,
+                benchmark_returns=resolved_bm_returns,
+            )
+            bm_total_ret = round(sum(resolved_bm_returns) * 100.0, 2)
+            p_beta = bm_stats.get("portfolio_beta")
+            p_alpha = bm_stats.get("portfolio_alpha_pct")
+            active_ret = bm_stats.get("active_return_pct")
+            te_pct = bm_stats.get("tracking_error_pct")
+            ir_val = bm_stats.get("information_ratio")
+        else:
+            bm_total_ret = None
+            p_beta = None
+            p_alpha = None
+            active_ret = None
+            te_pct = None
+            ir_val = None
+            limitations.append(
+                "Benchmark tracking metrics (Beta, Alpha, Tracking Error) unavailable: requires at least 5 synchronized daily settlement bars with NIFTY 50."
+            )
 
         return PerformanceMetrics(
             initial_capital=init_cash,
@@ -395,18 +416,33 @@ class PortfolioAnalyticsEngine:
             sortino_ratio=sortino,
             risk_free_rate_pct=6.5,
             benchmark_symbol="^NSEI",
-            benchmark_total_return_pct=round(sum(benchmark_returns) * 100.0, 2) if benchmark_returns else 12.50,
-            active_return_pct=bm_stats.get("active_return_pct"),
-            tracking_error_pct=bm_stats.get("tracking_error_pct"),
-            information_ratio=bm_stats.get("information_ratio"),
-            portfolio_beta=bm_stats.get("portfolio_beta") or 0.95,
-            portfolio_alpha_pct=bm_stats.get("portfolio_alpha_pct") or 2.10,
+            benchmark_total_return_pct=bm_total_ret,
+            active_return_pct=active_ret,
+            tracking_error_pct=te_pct,
+            information_ratio=ir_val,
+            portfolio_beta=p_beta,
+            portfolio_alpha_pct=p_alpha,
             observation_window_bars=len(daily_rets),
             start_date=state.created_at[:10],
             end_date=state.updated_at[:10],
             methodology_notes=methodology_notes,
             limitations=limitations,
         )
+
+    def get_benchmark_returns(self, n_bars: int = 252) -> Optional[List[float]]:
+        """Fetches daily settlement returns for NIFTY 50 benchmark from local market data store."""
+        try:
+            from app.market_data.store import market_data_store
+            bars = market_data_store.get_historical_bars("NIFTY50.NSE") or market_data_store.get_historical_bars("^NSEI")
+            if not bars or len(bars) < 5:
+                return None
+            closes = [b.close for b in sorted(bars, key=lambda x: x.trading_date)]
+            all_rets = [(closes[i] / closes[i - 1]) - 1.0 for i in range(1, len(closes)) if closes[i - 1] > 0]
+            if len(all_rets) < n_bars:
+                return all_rets
+            return all_rets[-n_bars:]
+        except Exception:
+            return None
 
 
 portfolio_analytics_engine = PortfolioAnalyticsEngine()

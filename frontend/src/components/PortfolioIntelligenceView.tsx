@@ -77,6 +77,7 @@ interface FactorTile {
   input_description: string;
   sample_size_observations: number;
   return_frequency: string;
+  data_origin?: string;
   is_available: boolean;
   methodology_notes: string;
   limitations_disclaimer: string;
@@ -655,12 +656,19 @@ export const PortfolioIntelligenceView: React.FC = () => {
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-dim)' }}>{f.factor_category}</span>
-                    <span className="brand-badge" style={{
-                      background: f.tilt_status === 'OVERWEIGHT' ? 'rgba(16, 185, 129, 0.15)' : (f.tilt_status === 'UNDERWEIGHT' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(255,255,255,0.05)'),
-                      color: f.tilt_status === 'OVERWEIGHT' ? '#10b981' : (f.tilt_status === 'UNDERWEIGHT' ? '#ef4444' : 'var(--text-main)')
-                    }}>
-                      {f.tilt_status}
-                    </span>
+                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                      {f.data_origin && (
+                        <span className="brand-badge" style={{ fontSize: '0.68rem', background: 'rgba(56, 189, 248, 0.1)', color: '#38bdf8', borderColor: 'rgba(56, 189, 248, 0.25)' }}>
+                          {f.data_origin}
+                        </span>
+                      )}
+                      <span className="brand-badge" style={{
+                        background: f.tilt_status === 'OVERWEIGHT' ? 'rgba(16, 185, 129, 0.15)' : (f.tilt_status === 'UNDERWEIGHT' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(255,255,255,0.05)'),
+                        color: f.tilt_status === 'OVERWEIGHT' ? '#10b981' : (f.tilt_status === 'UNDERWEIGHT' ? '#ef4444' : 'var(--text-main)')
+                      }}>
+                        {f.tilt_status}
+                      </span>
+                    </div>
                   </div>
                   <h4 style={{ fontSize: '1.1rem', fontWeight: 800, marginTop: '6px' }}>{f.factor_name}</h4>
                   <div style={{ fontSize: '1.5rem', fontWeight: 800, fontFamily: 'var(--font-mono)', margin: '8px 0', color: '#38bdf8' }}>

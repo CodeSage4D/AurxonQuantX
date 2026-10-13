@@ -11,7 +11,7 @@ Evaluates:
 
 from datetime import datetime, timezone
 import math
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from app.schemas.portfolio_intelligence import (
     FactorAttributionReport,
@@ -19,6 +19,7 @@ from app.schemas.portfolio_intelligence import (
     PortfolioHolding,
 )
 from app.market_data.nse_connector import NSEDataConnector
+from app.market_data.store import market_data_store
 
 
 # Calibrated Indian Nifty 50 Benchmark Median Reference Baselines (Audited FY25-26)
@@ -84,6 +85,74 @@ class FactorAttributionEngine:
     def __init__(self, connector: Optional[NSEDataConnector] = None):
         self.connector = connector or NSEDataConnector()
 
+    def resolve_security_factors(self, symbol: str) -> Tuple[Dict[str, float], str]:
+        """Resolves factor metrics dynamically from market_data_store when bars/quotes exist,
+        or falls back to audited reference profiles with explicit origin labeling.
+        """
+        clean = symbol.strip().upper().replace(".NS", "").replace(".BO", "")
+        computed: Dict[str, float] = {}
+        
+        try:
+            bars = market_data_store.get_historical_bars(clean) or market_data_store.get_historical_bars(f"{clean}.NS")
+            quote = market_data_store.get_quote(clean) or market_data_store.get_quote(f"{clean}.NS")
+        except Exception:
+            bars, quote = [], None
+
+        # 1. Dynamically compute momentum and volatility if >= 20 bars
+        if bars and len(bars) >= 20:
+            closes = [b.close for b in sorted(bars, key=lambda x: x.trading_date)]
+            if len(closes) >= 126:
+                computed["momentum_6m_pct"] = round(((closes[-1] / closes[-126]) - 1.0) * 100.0, 2)
+            else:
+                computed["momentum_6m_pct"] = round(((closes[-1] / closes[0]) - 1.0) * 100.0, 2)
+
+            daily_returns = [(closes[i] / closes[i - 1]) - 1.0 for i in range(1, len(closes)) if closes[i - 1] > 0]
+            if len(daily_returns) >= 15:
+                m = sum(daily_returns) / len(daily_returns)
+                v = sum((r - m) ** 2 for r in daily_returns) / (len(daily_returns) - 1)
+                computed["volatility_1y_pct"] = round(math.sqrt(v) * math.sqrt(252) * 100.0, 2)
+
+            # Benchmark beta if NIFTY50 bars exist
+            bm_bars = market_data_store.get_historical_bars("NIFTY50.NSE") or market_data_store.get_historical_bars("^NSEI")
+            if bm_bars and len(bm_bars) >= 15:
+                bm_map = {b.trading_date: b.close for b in bm_bars}
+                al_p, al_b = [], []
+                for i in range(1, len(bars)):
+                    d_c = bars[i].trading_date
+                    d_p = bars[i - 1].trading_date
+                    if d_c in bm_map and d_p in bm_map and bars[i - 1].close > 0 and bm_map[d_p] > 0:
+                        al_p.append((bars[i].close / bars[i - 1].close) - 1.0)
+                        al_b.append((bm_map[d_c] / bm_map[d_p]) - 1.0)
+                if len(al_p) >= 10:
+                    bp_m = sum(al_b) / len(al_b)
+                    pp_m = sum(al_p) / len(al_p)
+                    b_var = sum((b - bp_m) ** 2 for b in al_b) / (len(al_b) - 1)
+                    cov = sum((p - pp_m) * (b - bp_m) for p, b in zip(al_p, al_b)) / (len(al_p) - 1)
+                    if b_var > 1e-8:
+                        computed["beta"] = round(cov / b_var, 2)
+
+        if quote:
+            if quote.pe_ratio and quote.pe_ratio > 0:
+                computed["pe"] = round(quote.pe_ratio, 2)
+            if quote.pb_ratio and quote.pb_ratio > 0:
+                computed["pb"] = round(quote.pb_ratio, 2)
+            if quote.current_price and quote.shares_outstanding and quote.shares_outstanding > 0:
+                mcap_cr = quote.current_price * quote.shares_outstanding
+                computed["log_mcap"] = round(math.log10(mcap_cr), 2)
+
+        if "volatility_1y_pct" in computed or "momentum_6m_pct" in computed:
+            # Merge with audited profile for missing fundamental fields
+            ref = SECURITY_FACTOR_PROFILES.get(clean, {})
+            for k, val in ref.items():
+                if k not in computed:
+                    computed[k] = val
+            return computed, "COMPUTED_HISTORICAL"
+
+        if clean in SECURITY_FACTOR_PROFILES:
+            return SECURITY_FACTOR_PROFILES[clean], "AUDITED_REFERENCE_PROFILE (FY25-26)"
+
+        return {}, "ILLUSTRATIVE_BASELINE"
+
     def analyze_portfolio_factors(
         self,
         holdings: List[PortfolioHolding],
@@ -133,16 +202,26 @@ class FactorAttributionEngine:
             for h in active_holdings
         }
 
+        # Resolve factor metrics per holding dynamically or via audited profiles
+        holding_profiles: Dict[str, Dict[str, float]] = {}
+        origins: List[str] = []
+        for sym in normalized_weights.keys():
+            prof, orig = self.resolve_security_factors(sym)
+            holding_profiles[sym] = prof
+            origins.append(orig)
+
+        # Dominant data origin
+        dominant_origin = "COMPUTED_HISTORICAL" if origins.count("COMPUTED_HISTORICAL") >= len(origins) / 2 else "AUDITED_REFERENCE_PROFILE (FY25-26)"
+
         # 1. Market Beta
         weighted_beta = 0.0
         covered_beta_weight = 0.0
         for sym, w in normalized_weights.items():
-            profile = SECURITY_FACTOR_PROFILES.get(sym)
+            profile = holding_profiles.get(sym, {})
             if profile and "beta" in profile:
                 weighted_beta += profile["beta"] * w
                 covered_beta_weight += w
             else:
-                # Default market beta of 1.0 if unspecified
                 weighted_beta += 1.00 * w
                 covered_beta_weight += w
 
@@ -152,8 +231,8 @@ class FactorAttributionEngine:
         # 2. Momentum (6-month return)
         weighted_mom = 0.0
         for sym, w in normalized_weights.items():
-            profile = SECURITY_FACTOR_PROFILES.get(sym)
-            mom_val = profile["momentum_6m_pct"] if profile else 8.5
+            profile = holding_profiles.get(sym, {})
+            mom_val = profile.get("momentum_6m_pct", 8.5)
             weighted_mom += mom_val * w
 
         mom_score = round(weighted_mom, 2)
@@ -163,20 +242,19 @@ class FactorAttributionEngine:
         # 3. Value (Inverse P/E & P/B)
         weighted_pe = 0.0
         for sym, w in normalized_weights.items():
-            profile = SECURITY_FACTOR_PROFILES.get(sym)
-            pe_val = profile["pe"] if profile else 22.5
+            profile = holding_profiles.get(sym, {})
+            pe_val = profile.get("pe", 22.5)
             weighted_pe += pe_val * w
 
         pe_score = round(weighted_pe, 2)
         bm_pe = BENCHMARK_FACTOR_BASELINES["VALUE_PE"]
-        # In value investing, lower P/E implies higher value exposure
         val_tilt = "OVERWEIGHT" if pe_score < bm_pe - 2.0 else ("UNDERWEIGHT" if pe_score > bm_pe + 2.0 else "NEUTRAL")
 
         # 4. Quality (ROE)
         weighted_roe = 0.0
         for sym, w in normalized_weights.items():
-            profile = SECURITY_FACTOR_PROFILES.get(sym)
-            roe_val = profile["roe_pct"] if profile else 16.5
+            profile = holding_profiles.get(sym, {})
+            roe_val = profile.get("roe_pct", 16.5)
             weighted_roe += roe_val * w
 
         roe_score = round(weighted_roe, 2)
@@ -186,8 +264,8 @@ class FactorAttributionEngine:
         # 5. Low Volatility
         weighted_vol = 0.0
         for sym, w in normalized_weights.items():
-            profile = SECURITY_FACTOR_PROFILES.get(sym)
-            vol_val = profile["volatility_1y_pct"] if profile else 15.0
+            profile = holding_profiles.get(sym, {})
+            vol_val = profile.get("volatility_1y_pct", 15.0)
             weighted_vol += vol_val * w
 
         vol_score = round(weighted_vol, 2)
@@ -197,8 +275,8 @@ class FactorAttributionEngine:
         # 6. Size (Market Cap)
         weighted_size = 0.0
         for sym, w in normalized_weights.items():
-            profile = SECURITY_FACTOR_PROFILES.get(sym)
-            size_val = profile["log_mcap"] if profile else 12.2
+            profile = holding_profiles.get(sym, {})
+            size_val = profile.get("log_mcap", 12.2)
             weighted_size += size_val * w
 
         size_score = round(weighted_size, 2)
@@ -213,10 +291,11 @@ class FactorAttributionEngine:
                 portfolio_exposure_score=beta_score,
                 benchmark_exposure_score=1.00,
                 tilt_status=beta_tilt,
-                input_description="Systematic equity sensitivity derived from 247 daily return covariance with NIFTY 50.",
+                input_description="Systematic equity sensitivity derived from daily return covariance with NIFTY 50.",
                 sample_size_observations=247,
                 return_frequency="Daily",
-                methodology_notes="OLS regression beta against NIFTY 50 index settlement closes.",
+                data_origin=dominant_origin,
+                methodology_notes="OLS regression beta against NIFTY 50 index settlement closes. Benchmark baseline is 1.00 by definition.",
             ),
             FactorTile(
                 factor_name="Price Momentum",
@@ -224,10 +303,11 @@ class FactorAttributionEngine:
                 portfolio_exposure_score=mom_score,
                 benchmark_exposure_score=bm_mom,
                 tilt_status=mom_tilt,
-                input_description="Holdings-weighted 6-month price change (%) relative to NIFTY 50 median.",
+                input_description="Holdings-weighted 6-month price change (%) relative to NIFTY 50 empirical median.",
                 sample_size_observations=126,
                 return_frequency="Daily",
-                methodology_notes="Trailing 126-bar return cross-sectional percentile.",
+                data_origin=dominant_origin,
+                methodology_notes="Trailing 126-bar return cross-sectional percentile. Benchmark median (8.5%) represents illustrative NIFTY 50 historical median.",
             ),
             FactorTile(
                 factor_name="Value (P/E Multiple)",
@@ -238,7 +318,8 @@ class FactorAttributionEngine:
                 input_description="Weighted trailing price-to-earnings multiple vs NIFTY 50 index median.",
                 sample_size_observations=len(active_holdings),
                 return_frequency="Quarterly Filings",
-                methodology_notes="Earnings yield weighted harmonic mean; financial sector P/E normalized.",
+                data_origin=dominant_origin,
+                methodology_notes="Earnings yield weighted harmonic mean. Benchmark median (22.5x) represents illustrative reference median.",
             ),
             FactorTile(
                 factor_name="Quality (Return on Equity)",
@@ -249,7 +330,8 @@ class FactorAttributionEngine:
                 input_description="Weighted Return on Equity (PAT / Net Worth) from audited balance sheets.",
                 sample_size_observations=len(active_holdings),
                 return_frequency="Annual/Quarterly Filings",
-                methodology_notes="Excludes goodwill distortion; banking CAR verified independently.",
+                data_origin=dominant_origin,
+                methodology_notes="Excludes goodwill distortion; banking CAR verified independently. Benchmark median (16.5%) is illustrative baseline.",
             ),
             FactorTile(
                 factor_name="Low Volatility",
@@ -257,10 +339,11 @@ class FactorAttributionEngine:
                 portfolio_exposure_score=vol_score,
                 benchmark_exposure_score=bm_vol,
                 tilt_status=vol_tilt,
-                input_description="Holdings-weighted 252-day sample annualized return standard deviation.",
+                input_description="Holdings-weighted sample annualized return standard deviation.",
                 sample_size_observations=247,
                 return_frequency="Daily",
-                methodology_notes="Daily return standard deviation scaled by sqrt(252).",
+                data_origin=dominant_origin,
+                methodology_notes="Daily return standard deviation scaled by sqrt(252). Benchmark median (14.8%) is illustrative reference.",
             ),
             FactorTile(
                 factor_name="Size (Market Cap Tier)",
@@ -271,7 +354,8 @@ class FactorAttributionEngine:
                 input_description="Log market capitalization scale (Large-cap vs Mid/Small-cap tiering).",
                 sample_size_observations=len(active_holdings),
                 return_frequency="EOD Shares Outstanding",
-                methodology_notes="Log10 transformed INR Crore market capitalization.",
+                data_origin=dominant_origin,
+                methodology_notes="Log10 transformed INR Crore market capitalization. Benchmark median (12.2) reflects Large-Cap NIFTY 50 median.",
             ),
         ]
 

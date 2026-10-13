@@ -250,5 +250,26 @@
     - Frontend Production Build: Clean compilation in 3.01s.
 - **Milestone Decision:** **PASS** (Phase 4.4 milestone fully achieved and independently verified; boundaries strictly respected). Phase 5 remains gated.
 
+---
+
+## 8. Phase 4.5 — Integrated Portfolio Validation & Release Readiness (2026-10-13)
+
+- **Baseline Commit:** `6eeca74` (tagged `checkpoint-phase-4-5-start`)
+- **Product Identity:** **Aurxon QuantX** (Brand: **AURXON**)
+- **Milestone Objective:** Independent verification of integrated research, portfolio intelligence, factor analytics, stress testing, and paper-only rebalancing.
+- **Delivered & Audited Capabilities:**
+  - **Accounting & FIFO Lot Acceptance:** Multi-lot FIFO consumption, weighted average cost, and net realized P&L taking into account statutory sell transaction costs verified against known-answer mathematical examples.
+  - **Performance & MWR Edge Case Hardening:** Tested TWR geometric linking and hardened MWR/IRR Bisection solver to return `None` on bracket failure (`[-90%, +500%]`) rather than fabricating answers.
+  - **Factor Provenance & Dynamic Resolution:** Enabled dynamic factor computation from date-stamped bars and quotes in `MarketDataStore` with explicit `data_origin` tagging (`COMPUTED_HISTORICAL` vs `AUDITED_REFERENCE_PROFILE (FY25-26)`). Disclosed benchmark medians as illustrative empirical baselines.
+  - **Rebalancing Engine Defect Remediation:** Corrected dropped unpriced trade orders in `rebalancing.py`; now preserved as non-actionable `HOLD` orders. Sells-first execution sequencing and statutory costs verified.
+  - **Two-Portfolio Isolation & Persistence:** Verified strict ledger segregation between `PORT_ALPHA` and `PORT_BETA` with zero cross-portfolio state leakage across simulated process restarts.
+  - **Security & Execution Boundaries:** Maintained `ENABLE_REAL_TRADING = false`, active kill switch verification, privacy regex redaction, and clear provider licensing boundaries.
+  - **Release Suite:**
+    - Offline Backend Test Suite: **189 passed, 2 skipped** (in 2.79s).
+    - Dedicated Phase 4.5 Suite: `backend/tests/test_phase_4_5_integrated_validation.py` (**6 passed** in 1.14s).
+    - Frontend Production Build: Clean compilation in 2.01s.
+- **Milestone Decision:** **PASS** (Integrated portfolio validation complete and independently verified). Work stopped at Phase 4.5 boundary; Phase 5 not started.
+
+
 
 

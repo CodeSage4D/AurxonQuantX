@@ -256,8 +256,8 @@ class PaperRebalancingEngine:
 
             total_costs += est_cost
 
-        # Order trades: Sells first to generate liquidity, then Buys
-        ordered_trades = sells + buys
+        # Order trades: Sells first to generate liquidity, then Buys, followed by unpriced/blocked holds
+        ordered_trades = sells + buys + proposed_trades
 
         # Cash balance simulation
         # Cash after sells:

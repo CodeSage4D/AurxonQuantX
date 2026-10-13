@@ -114,6 +114,7 @@ class FactorTile(BaseModel):
     sample_size_observations: int
     return_frequency: str = "Daily"
     confidence_level: str = "Descriptive Characteristic"
+    data_origin: str = "COMPUTED_HISTORICAL"  # COMPUTED_HISTORICAL, AUDITED_REFERENCE_PROFILE, ILLUSTRATIVE_BASELINE
     is_available: bool = True
     unavailability_reason: Optional[str] = None
     methodology_notes: str
