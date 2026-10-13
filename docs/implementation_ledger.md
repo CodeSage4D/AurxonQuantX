@@ -20,6 +20,7 @@
 | **ADR-07** | **Untrusted Document Ingestion & Injection Neutralization** | Accepted | Ingested PDFs and HTML filings are strictly treated as untrusted text. Active prompt injection directives (`Ignore instructions...`, `SYSTEM OVERRIDE`) are scrubbed and quarantined before reaching model synthesis. |
 | **ADR-08** | **Deterministic Mutual Fund Overlap & Direct Drag Math** | Accepted | Scheme overlap is computed as $\sum \min(w_{A,i}, w_{B,i})$. Direct vs Regular compounding expense savings are evaluated deterministically over 10-year horizons with zero LLM guesswork. |
 | **ADR-09** | **7-Point Multi-Dimensional IPO Decision Framework** | Accepted | IPO evaluation strictly decouples business quality from IPO valuation and separates listing-day speculation from long-term ownership, forbidding any speculative listing gain promises. |
+| **ADR-10** | **Persistent Paper Trading Ledger, Idempotency & Risk Veto** | Accepted | Simulated execution requires strict state persistence (SQLite WAL) without broker integration. Enforced double-entry cash conservation, duplicate protection via unique idempotency keys, FIFO lot tracking, statutory Indian transaction costs (STT, Stamp Duty, GST, NSE/SEBI fees), configurable risk limits, and an emergency operator kill switch. |
 
 ---
 
@@ -101,12 +102,27 @@
   - **REST API Endpoints:** Strategy catalogue, fixture catalogue with explicit demonstration labels, and simulation execution endpoint (`/api/v1/backtest/*`). Rejects uncurated equity requests with HTTP 404 to eliminate silent data substitution.
   - **Release Suite:** 107 passing automated backend tests in 1.74s; clean production frontend build in 2.02s.
 
+### Milestone: Phase 3, Stage 2 — Paper Trading Portfolio Manager
+- **Commit:** `[Current Phase 3 Stage 2 Commit]`
+- **Date:** 2026-10-13
+- **Delivered & Audited Capabilities:**
+  - **Persistent Virtual Cash & Equity Ledger:** SQLite WAL-backed double-entry balance accounting (`data/aurxon_paper_portfolio.sqlite`) with restart recovery and mathematical cash conservation ($100\%$ preserved minus statutory costs and slippage).
+  - **Order Lifecycle Simulation:** Strongly-typed state machine covering `PENDING` $\to$ `SUBMITTED` $\to$ `FILLED` / `REJECTED` / `CANCELLED` for Market and resting Limit orders.
+  - **Inventory & Cost Accounting:** Open positions, weighted average cost, FIFO inventory lot consumption, realized P&L, mark-to-market unrealized P&L, and instrument exposure weighting.
+  - **Indian Statutory Costs & Slippage:** Execution of official schedule `2024.2-STATUTORY` (STT, Stamp Duty, NSE transaction fees, SEBI charges, GST) plus configurable spread and slippage.
+  - **Duplicate-Event Protection:** Client idempotency keys (`idempotency_key UNIQUE`) prevent double-execution across duplicate requests or network retries.
+  - **Independent Risk Engine & Kill Switch:** Hard limits (Max order value ₹5,00,000, Max position weight 30%, Daily stop-loss ₹50,000) and an emergency operator kill switch.
+  - **Corporate Actions Support:** Simulated cash dividends credit virtual cash without altering share counts; 2:1 stock split scales share counts and halves average cost while scaling open FIFO lots.
+  - **Data Provenance & Freshness Guard:** Only instruments with verified market feeds are eligible for simulation. Unverified tickers are rejected with diagnostic errors.
+  - **Frontend Experience:** Dedicated `PaperTradingView` React/TS component featuring amber simulation warning banner, live metrics cards, emergency kill switch toggle, order submission form, positions table, and chronological order audit trail.
+  - **Release Suite:** 121 passing automated backend tests in 1.78s; clean production frontend build in 1.94s.
+
 ---
 
 ## 4. Test Matrix Summary
 
 ```
-======================== 107 passed, 1 warning in 1.74s ========================
+======================== 121 passed, 1 warning in 1.78s ========================
 - test_api_endpoints.py: 11 passed (Health, Quote, Sync, Audit Records, Integrity, Companion, Sources, IPO, Funds, Export, Ingestion Upload)
 - test_audit_ledger.py: 2 passed (Sequential Hash-Chaining, Tampering Detection)
 - test_document_ingestion.py: 2 passed (Text/HTML Ingestion with Prompt Injection, Empty/Corrupt PDF Handling)
@@ -120,6 +136,7 @@
 - test_phase_2_1_ipo_math.py: 5 passed (Issue Structure & Dilution, Promoter Bounds, CAGR Limits, Negative EPS, Bajaj Cross-Check)
 - test_phase_2_2_semantics_and_connectors.py: 14 passed (Negative/Zero/Missing EPS, CAGR Semantics, AMFI Parser & Lookup, IPO Lineage, Readiness Gates, Endpoints)
 - test_phase_3_stage_1_backtesting.py: 27 passed (Data Contract Validation, Next-Bar Execution, Statutory Costs, Corporate Actions, Deterministic Replay, Ledger Chaining, REST API, ETF Rates, Intraday Rates, Ex-Dividend Ordering, Timezone Offsets, Zero Volatility, HTTP 404)
+- test_phase_3_stage_2_paper_trading.py: 14 passed (Initial State, Market Buy & Cash Conservation, Market Sell & Realized P&L, Insufficient Cash, Short Selling Rejection, Limit Orders, Order Cancellation, Idempotency Deduplication, Restart Recovery, Kill Switch Veto, Max Order Value, Max Position Weight, Corporate Actions, REST Endpoints)
 - test_screen_ocr.py: 3 passed (Symbol Detection, Privacy Redaction, Pause Control)
 - test_source_registry.py: 2 passed (Default Sources Registered, Custom Source Registration)
 - test_valuation.py: 8 passed (Graham, DCF, Sensitivity Matrix, Bank Exclusion, Piotroski, Altman Z, Risk Metrics, Dossier)
@@ -130,10 +147,10 @@
 ## 5. Unresolved Risks & Next Phase Roadmap
 
 1. **Unresolved Risks & Status:**
-   - **Empirical Equity OHLCV Data:** AMFI connector provides mutual fund NAVs, not equity OHLCV. Equity backtesting on uncurated tickers is **BLOCKED** until licensed Bhavcopy/tick feed connector is implemented. Benchmark fixtures (`RELIANCE`, `TCS`, `NIFTY50`) are fully verified.
+   - **Empirical Equity OHLCV Data:** AMFI connector provides mutual fund NAVs, not equity OHLCV. Equity simulation on uncurated tickers remains **BLOCKED** until licensed Bhavcopy/tick feed connector is implemented. Benchmark fixtures (`RELIANCE`, `TCS`, `NIFTY50`) are fully verified.
    - **External LLM Credentials:** `OPENAI_API_KEY` and `GROQ_API_KEY` remain optional. System operates reliably in offline demonstration/heuristic mode.
    - **Real-Money Trading:** Strictly disabled (`ENABLE_REAL_TRADING = false`). Live broker order execution is prohibited.
-2. **Next Milestone (Phase 3, Stage 2):**
-   - Paper-trading execution simulation and virtual broker ledger.
+2. **Next Milestone (Phase 3, Stage 3):**
    - Multi-asset portfolio rebalancing and allocation modeling.
    - Factor attribution and risk parity engine under Indian market stress scenarios.
+   - Multi-agent signal-driven order generation (strictly guarded).

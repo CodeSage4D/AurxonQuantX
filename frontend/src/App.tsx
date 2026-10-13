@@ -11,6 +11,7 @@ import { ScreenCompanionWidget } from './components/ScreenCompanionWidget';
 import { AuditLedgerModal } from './components/AuditLedgerModal';
 import { IPOResearchView } from './components/IPOResearchView';
 import { FundResearchView } from './components/FundResearchView';
+import { PaperTradingView } from './components/PaperTradingView';
 import { SourcesInspectionModal } from './components/SourcesInspectionModal';
 import {
   Activity,
@@ -24,9 +25,10 @@ import {
   PieChart,
   Layers,
   Database,
+  TrendingUp,
 } from 'lucide-react';
 
-type TabView = 'EQUITIES' | 'IPO' | 'MUTUAL_FUNDS';
+type TabView = 'EQUITIES' | 'IPO' | 'MUTUAL_FUNDS' | 'PAPER_TRADING';
 
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabView>('EQUITIES');
@@ -161,6 +163,14 @@ export const App: React.FC = () => {
             style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
           >
             <PieChart size={14} /> Mutual Funds & ETFs
+          </button>
+          <button
+            type="button"
+            className={`chip-btn ${activeTab === 'PAPER_TRADING' ? 'active' : ''}`}
+            onClick={() => setActiveTab('PAPER_TRADING')}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+          >
+            <TrendingUp size={14} /> Paper Portfolio
           </button>
         </div>
 
@@ -318,16 +328,23 @@ export const App: React.FC = () => {
         </main>
       )}
 
+      {/* Tab: Paper Trading Portfolio */}
+      {activeTab === 'PAPER_TRADING' && (
+        <main style={{ padding: '24px', maxWidth: '1400px', margin: '0 auto', width: '100%' }}>
+          <PaperTradingView />
+        </main>
+      )}
+
       {/* Screen Companion Live Bottom Bar */}
       <footer className="companion-bar">
         <div className="companion-left">
           <span style={{ color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>AURXON SYSTEM ACTIVE</span>
           <div className="companion-symbols">
-            <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>Active Modules:</span>
             <span className="companion-tag">EQUITIES</span>
             <span className="companion-tag">IPO PROSPECTUS</span>
             <span className="companion-tag">MUTUAL FUNDS</span>
             <span className="companion-tag">ETFs</span>
+            <span className="companion-tag" style={{ borderColor: 'var(--accent-amber)', color: 'var(--accent-amber)' }}>PAPER SIMULATOR</span>
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-dim)', fontSize: '0.75rem' }}>
