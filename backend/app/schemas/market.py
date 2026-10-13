@@ -9,13 +9,22 @@ from pydantic import BaseModel, Field
 
 class DataClassification(str, Enum):
     """Rigorous classification of data provenance and fidelity."""
-    LIVE_EXCHANGE = "LIVE_EXCHANGE"  # Real-time tick stream from official exchange
-    DELAYED_EXCHANGE = "DELAYED_EXCHANGE"  # Official exchange feed with 15-min delay
-    THIRD_PARTY_DELAYED = "THIRD_PARTY_DELAYED"  # Third-party aggregator (Yahoo Finance, etc. NOT an official exchange feed)
-    CACHED_LOCAL = "CACHED_LOCAL"  # Local disk-cached snapshot from previous fetch
-    HISTORICAL_FILING = "HISTORICAL_FILING"  # Audited balance sheet / exchange quarterly disclosure
-    SYNTHETIC_BENCHMARK = "SYNTHETIC_BENCHMARK"  # Curated offline reference fixture for testing
-    UNAVAILABLE = "UNAVAILABLE"  # Data could not be acquired
+    # Phase 2.2 Canonical States
+    LIVE_VERIFIED = "LIVE_VERIFIED"
+    DELAYED_VERIFIED = "DELAYED_VERIFIED"
+    HISTORICAL_VERIFIED = "HISTORICAL_VERIFIED"
+    CACHED = "CACHED"
+    SYNTHETIC = "SYNTHETIC"
+    UNVERIFIED = "UNVERIFIED"
+    UNAVAILABLE = "UNAVAILABLE"
+
+    # Existing milestone naming conventions preserved with identical semantics
+    LIVE_EXCHANGE = "LIVE_EXCHANGE"
+    DELAYED_EXCHANGE = "DELAYED_EXCHANGE"
+    THIRD_PARTY_DELAYED = "THIRD_PARTY_DELAYED"
+    CACHED_LOCAL = "CACHED_LOCAL"
+    HISTORICAL_FILING = "HISTORICAL_FILING"
+    SYNTHETIC_BENCHMARK = "SYNTHETIC_BENCHMARK"
 
 
 class FreshnessStatus(str, Enum):

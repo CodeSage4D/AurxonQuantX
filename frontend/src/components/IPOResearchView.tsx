@@ -10,6 +10,9 @@ import {
   TrendingUp,
   CheckCircle2,
   ShieldAlert,
+  ShieldCheck,
+  Database,
+  ExternalLink,
 } from 'lucide-react';
 
 export const IPOResearchView: React.FC = () => {
@@ -183,6 +186,59 @@ export const IPOResearchView: React.FC = () => {
             </div>
           </div>
 
+          {/* Recommendation Readiness Gate Card */}
+          {dossier.readiness_gate && (
+            <div
+              className="glass-card"
+              style={{
+                padding: '14px 18px',
+                borderLeft: `4px solid ${
+                  dossier.readiness_gate.status === 'ACTIVE_UNQUALIFIED'
+                    ? 'var(--status-verified)'
+                    : dossier.readiness_gate.status === 'QUALIFIED_ADVISORY'
+                    ? 'var(--status-uncertain)'
+                    : 'var(--status-contradicted)'
+                }`,
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '12px',
+              }}
+            >
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <ShieldCheck size={16} style={{ color: 'var(--status-verified)' }} />
+                  <strong style={{ fontSize: '0.85rem' }}>Recommendation Readiness Gate:</strong>
+                  <span
+                    className={`badge ${
+                      dossier.readiness_gate.status === 'ACTIVE_UNQUALIFIED'
+                        ? 'badge-verified'
+                        : dossier.readiness_gate.status === 'QUALIFIED_ADVISORY'
+                        ? 'badge-uncertain'
+                        : 'badge-contradicted'
+                    }`}
+                  >
+                    {dossier.readiness_gate.status}
+                  </span>
+                </div>
+                {dossier.readiness_gate.qualification_warnings.length > 0 && (
+                  <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+                    {dossier.readiness_gate.qualification_warnings.join(' • ')}
+                  </div>
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: '12px', fontSize: '0.75rem', fontFamily: 'var(--font-mono)' }}>
+                {Object.entries(dossier.readiness_gate.dimension_scores).map(([dim, score]) => (
+                  <div key={dim} style={{ textAlign: 'center' }}>
+                    <div style={{ color: 'var(--text-dim)', textTransform: 'capitalize' }}>{dim.replace(/_/g, ' ')}</div>
+                    <div style={{ fontWeight: 700, color: 'var(--accent-cyan)' }}>{(score * 100).toFixed(0)}%</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Issue Structure & Mechanics Grid */}
           <div className="glass-card">
             <div className="card-header">
@@ -235,7 +291,9 @@ export const IPOResearchView: React.FC = () => {
                 <div className="metric-box">
                   <div className="metric-label">Total Issue Size</div>
                   <div className="metric-value">₹{(dossier.structure.total_issue_crores).toLocaleString('en-IN', { maximumFractionDigits: 1 })} Cr</div>
-                  <div className="metric-sub">Dilution: {dossier.structure.dilution_percent}%</div>
+                  <div className="metric-sub">
+                    Dilution: {dossier.structure.dilution_percent !== null ? `${dossier.structure.dilution_percent}%` : 'N/A'}
+                  </div>
                 </div>
 
                 <div className="metric-box">
@@ -248,8 +306,18 @@ export const IPOResearchView: React.FC = () => {
 
                 <div className="metric-box">
                   <div className="metric-label">P/E @ Upper Band</div>
-                  <div className="metric-value">{dossier.valuation.pe_at_cap}x</div>
-                  <div className="metric-sub">Peer Avg: {dossier.valuation.industry_average_pe}x</div>
+                  <div className="metric-value">
+                    {dossier.valuation.pe_at_cap !== null && dossier.valuation.pe_at_cap !== undefined ? (
+                      `${dossier.valuation.pe_at_cap}x`
+                    ) : (
+                      <span className="badge badge-unverified" style={{ fontSize: '0.78rem' }}>
+                        {dossier.valuation.pe_status || 'NOT APPLICABLE'}
+                      </span>
+                    )}
+                  </div>
+                  <div className="metric-sub">
+                    {dossier.valuation.pe_reason ? dossier.valuation.pe_reason : `Peer Avg: ${dossier.valuation.industry_average_pe}x`}
+                  </div>
                 </div>
               </div>
             </div>
@@ -389,6 +457,68 @@ export const IPOResearchView: React.FC = () => {
               ))}
             </div>
           </div>
+
+          {/* Primary Source Lineage Records (Ground Truth Provenance) */}
+          {dossier.lineage_records && dossier.lineage_records.length > 0 && (
+            <div className="glass-card">
+              <div className="card-header">
+                <div className="card-title">
+                  <Database size={18} style={{ color: 'var(--accent-cyan)' }} />
+                  <span>Statutory Filing Lineage & Document Ground-Truth ({dossier.lineage_records.length} Verified Records)</span>
+                </div>
+                <span className="badge badge-verified">SEBI RHP EXTRACTED</span>
+              </div>
+
+              <div className="card-body" style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+                  <thead>
+                    <tr style={{ color: 'var(--text-dim)', borderBottom: '1px solid var(--border-subtle)', textAlign: 'left' }}>
+                      <th style={{ padding: '8px' }}>Metric Field</th>
+                      <th style={{ padding: '8px' }}>Normalized Value</th>
+                      <th style={{ padding: '8px' }}>Filing & Page</th>
+                      <th style={{ padding: '8px' }}>Original Disclosed Text</th>
+                      <th style={{ padding: '8px', textAlign: 'right' }}>Source Verification</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dossier.lineage_records.map((lin, idx) => (
+                      <tr key={idx} style={{ borderBottom: '1px solid hsla(220, 20%, 20%, 0.3)' }}>
+                        <td style={{ padding: '10px 8px', fontWeight: 600, color: 'var(--accent-cyan)', fontFamily: 'var(--font-mono)' }}>
+                          {lin.field_name}
+                        </td>
+                        <td style={{ padding: '10px 8px', fontWeight: 700 }}>
+                          {lin.normalized_value} {lin.normalized_units}
+                        </td>
+                        <td style={{ padding: '10px 8px', color: 'var(--text-muted)' }}>
+                          {lin.filing_name} {lin.page_number ? `(Page ${lin.page_number})` : ''}
+                        </td>
+                        <td style={{ padding: '10px 8px', color: 'var(--text-main)', fontSize: '0.78rem', maxWidth: '320px' }}>
+                          "{lin.original_extracted_text}"
+                        </td>
+                        <td style={{ padding: '10px 8px', textAlign: 'right' }}>
+                          <a
+                            href={lin.source_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              color: 'var(--accent-cyan)',
+                              textDecoration: 'none',
+                              fontSize: '0.75rem',
+                            }}
+                          >
+                            <ExternalLink size={12} /> {lin.verification_status}
+                          </a>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>

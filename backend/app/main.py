@@ -174,6 +174,8 @@ from app.sources.registry import source_registry
 from app.ingestion.parser import document_parser, DocumentIngestionResult
 from app.ipo.analyzer import ipo_analyzer
 from app.funds.analyzer import fund_analyzer
+from app.connectors.amfi_connector import amfi_connector, AMFINavRecord
+from app.schemas.semantics import FieldLineageRecord, RecommendationReadinessGate
 from app.schemas.ipo import IPODossier
 from app.schemas.funds import FundComparisonResult, PortfolioAllocationPlan
 
@@ -234,6 +236,18 @@ async def analyze_ipo_endpoint(symbol_or_name: str) -> IPODossier:
     return dossier
 
 
+@app.get("/api/v1/ipo/lineage/{symbol_or_name}", response_model=List[FieldLineageRecord])
+async def get_ipo_lineage_endpoint(symbol_or_name: str) -> List[FieldLineageRecord]:
+    """Retrieves document-level audit lineage records for material prospectus metrics."""
+    return ipo_analyzer.get_lineage_records(symbol_or_name)
+
+
+@app.get("/api/v1/gates/readiness/{symbol_or_name}", response_model=RecommendationReadinessGate)
+async def get_readiness_gate_endpoint(symbol_or_name: str) -> RecommendationReadinessGate:
+    """Retrieves multi-dimensional evidence readiness gates evaluating if recommendation can be safely issued."""
+    return ipo_analyzer.get_readiness_gate(symbol_or_name)
+
+
 @app.get("/api/v1/funds/list")
 async def list_funds():
     """Lists curated Indian mutual fund and ETF benchmark schemes."""
@@ -242,6 +256,15 @@ async def list_funds():
         {"scheme_code": "NIFTYBEES", "name": "Nippon India ETF Nifty 50 BeES", "category": "INDEX_ETF", "plan": "DIRECT"},
         {"scheme_code": "MIRAE_LARGE", "name": "Mirae Asset Large Cap Fund", "category": "LARGE_CAP", "plan": "DIRECT"},
     ]
+
+
+@app.get("/api/v1/funds/nav/{scheme_code}", response_model=AMFINavRecord)
+async def get_fund_nav_endpoint(scheme_code: str) -> AMFINavRecord:
+    """Fetches official statutory daily AMFI NAV record with verified primary source attribution."""
+    record = await amfi_connector.get_nav(scheme_code)
+    if not record:
+        raise HTTPException(status_code=404, detail=f"Scheme code '{scheme_code}' not found in official AMFI daily records")
+    return record
 
 
 @app.get("/api/v1/funds/compare", response_model=FundComparisonResult)

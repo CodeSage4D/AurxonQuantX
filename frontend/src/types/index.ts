@@ -89,8 +89,53 @@ export interface AuditRecordSummary {
 }
 
 // ============================================================================
-// PHASE 2 TYPES: IPO INTELLIGENCE & MUTUAL FUNDS
+// PHASE 2 & 2.2 TYPES: IPO INTELLIGENCE, FINANCIAL SEMANTICS & PROVENANCE
 // ============================================================================
+
+export type MetricStatus = 'VALID' | 'NOT_APPLICABLE' | 'DATA_UNAVAILABLE' | 'CALCULATION_ERROR';
+export type RecommendationStatus = 'ACTIVE_UNQUALIFIED' | 'QUALIFIED_ADVISORY' | 'BLOCKED_DEFICIENT';
+export type ClaimType =
+  | 'SOURCE_FACT'
+  | 'CORROBORATED_FACT'
+  | 'DETERMINISTIC_CALCULATION'
+  | 'ANALYST_INTERPRETATION'
+  | 'FORECAST_SCENARIO'
+  | 'UNSUPPORTED_CLAIM';
+
+export interface FieldLineageRecord {
+  field_name: string;
+  issuer: string;
+  filing_name: string;
+  publication_date: string;
+  source_url: string;
+  page_number?: number | null;
+  table_or_section?: string | null;
+  original_extracted_text: string;
+  normalized_value: any;
+  original_units: string;
+  normalized_units: string;
+  extraction_method: string;
+  verification_status: string;
+  reviewer_notes?: string | null;
+}
+
+export interface RecommendationReadinessGate {
+  is_ready: boolean;
+  status: RecommendationStatus;
+  blocking_reasons: string[];
+  qualification_warnings: string[];
+  dimension_scores: Record<string, number>;
+}
+
+export interface DataFreshnessRecord {
+  data_type: string;
+  observation_date: string;
+  as_of_timestamp: string;
+  max_permitted_age_hours: number;
+  age_hours: number;
+  is_stale: boolean;
+  stale_warning?: string | null;
+}
 
 export interface IssueStructure {
   issuer_name: string;
@@ -104,7 +149,9 @@ export interface IssueStructure {
   total_issue_crores: number;
   pre_issue_shares_cr: number;
   post_issue_shares_cr: number;
-  dilution_percent: number;
+  dilution_percent: number | null;
+  dilution_status?: MetricStatus;
+  dilution_reason?: string | null;
   promoter_holding_pre_percent: number;
   promoter_holding_post_percent: number;
   use_of_proceeds: Record<string, number>;
@@ -126,7 +173,7 @@ export interface DisclosedRiskFactor {
 
 export interface PeerComparison {
   peer_name: string;
-  pe_ratio: number;
+  pe_ratio: number | null;
   pb_ratio: number;
   roe_pct: number;
   revenue_crores: number;
@@ -139,7 +186,9 @@ export interface IPOFinancials {
   ebitda_crores: number[];
   pat_crores: number[];
   operating_cash_flow_crores: number[];
-  revenue_cagr_3y_pct: number;
+  revenue_cagr_3y_pct: number | null;
+  cagr_status?: MetricStatus;
+  cagr_reason?: string | null;
   ebitda_margin_latest_pct: number;
   pat_margin_latest_pct: number;
   roe_latest_pct: number;
@@ -150,10 +199,12 @@ export interface IPOFinancials {
 
 export interface IPOValuationAnalysis {
   market_cap_at_cap_crores: number;
-  pe_at_floor: number;
-  pe_at_cap: number;
+  pe_at_floor: number | null;
+  pe_at_cap: number | null;
+  pe_status?: MetricStatus;
+  pe_reason?: string | null;
   industry_average_pe: number;
-  valuation_premium_discount_pct: number;
+  valuation_premium_discount_pct?: number | null;
   peers: PeerComparison[];
   scenarios: Record<string, number>;
 }
@@ -176,6 +227,11 @@ export interface IPODossier {
   overall_recommendation: string;
   evidence_score: number;
   created_at: string;
+  lineage_records?: FieldLineageRecord[];
+  readiness_gate?: RecommendationReadinessGate;
+  freshness_record?: DataFreshnessRecord;
+  source_url?: string | null;
+  data_classification?: string;
 }
 
 export interface HoldingItem {

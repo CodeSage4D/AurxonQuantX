@@ -8,6 +8,15 @@ from typing import Dict, List, Optional
 from pydantic import BaseModel, Field
 
 
+from app.schemas.semantics import (
+    DataFreshnessRecord,
+    FieldLineageRecord,
+    MetricStatus,
+    RecommendationReadinessGate,
+)
+from app.schemas.market import DataClassification
+
+
 class IPORiskCategory(str, Enum):
     LITIGATION_REGULATORY = "LITIGATION_REGULATORY"
     CUSTOMER_CONCENTRATION = "CUSTOMER_CONCENTRATION"
@@ -48,10 +57,14 @@ class IssueStructure(BaseModel):
 
     pre_issue_shares_cr: float = Field(ge=0.0)
     post_issue_shares_cr: float = Field(ge=0.0)
-    dilution_percent: float = Field(description="Percentage dilution of equity base")
+    dilution_percent: Optional[float] = Field(default=None, description="Percentage dilution of equity base")
+    dilution_status: MetricStatus = Field(default=MetricStatus.VALID)
+    dilution_reason: Optional[str] = None
 
     promoter_holding_pre_percent: float = Field(ge=0.0, le=100.0)
     promoter_holding_post_percent: float = Field(ge=0.0, le=100.0)
+    promoter_holding_post_min_percent: Optional[float] = None
+    promoter_holding_post_max_percent: Optional[float] = None
 
     use_of_proceeds: Dict[str, float] = Field(
         default_factory=dict, description="Allocation breakdown of fresh issue proceeds (INR Cr)"
@@ -80,7 +93,10 @@ class IPOFinancials(BaseModel):
     pat_crores: List[float]
     operating_cash_flow_crores: List[float]
 
-    revenue_cagr_3y_pct: float
+    revenue_cagr_3y_pct: Optional[float] = None
+    cagr_status: MetricStatus = Field(default=MetricStatus.VALID)
+    cagr_reason: Optional[str] = None
+
     ebitda_margin_latest_pct: float
     pat_margin_latest_pct: float
     roe_latest_pct: float
@@ -91,8 +107,8 @@ class IPOFinancials(BaseModel):
 
 class PeerComparison(BaseModel):
     peer_name: str
-    pe_ratio: float
-    pb_ratio: float
+    pe_ratio: Optional[float] = None
+    pb_ratio: Optional[float] = None
     roe_pct: float
     revenue_crores: float
     pat_margin_pct: float
@@ -100,10 +116,12 @@ class PeerComparison(BaseModel):
 
 class IPOValuationAnalysis(BaseModel):
     market_cap_at_cap_crores: float
-    pe_at_floor: float
-    pe_at_cap: float
+    pe_at_floor: Optional[float] = None
+    pe_at_cap: Optional[float] = None
+    pe_status: MetricStatus = Field(default=MetricStatus.VALID)
+    pe_reason: Optional[str] = None
     industry_average_pe: float
-    valuation_premium_discount_pct: float
+    valuation_premium_discount_pct: Optional[float] = None
     peers: List[PeerComparison] = Field(default_factory=list)
     scenarios: Dict[str, float] = Field(
         default_factory=dict,
@@ -132,3 +150,10 @@ class IPODossier(BaseModel):
     overall_recommendation: IPOVerdictEnum
     evidence_score: float = Field(ge=0.0, le=1.0)
     created_at: str
+
+    # Lineage and Governance
+    lineage_records: List[FieldLineageRecord] = Field(default_factory=list)
+    readiness_gate: Optional[RecommendationReadinessGate] = None
+    freshness_record: Optional[DataFreshnessRecord] = None
+    source_url: Optional[str] = None
+    data_classification: DataClassification = Field(default=DataClassification.HISTORICAL_VERIFIED)

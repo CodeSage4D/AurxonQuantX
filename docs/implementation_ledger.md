@@ -71,14 +71,29 @@
   - `docs/fund_quantitative_reference_tests.md`: Mathematical references for CAGR, tracking error, direct savings, overlap, and IDCW discipline.
   - `docs/document_extraction_accuracy.md`: Searchable vs scanned PDF boundaries, Indian numbers, accounting parentheses, and prompt injection defense.
   - `docs/phase_2_1_issue_register.md`: 9 audit findings logged and 100% resolved.
+  - `docs/phase_2_1_issue_register.md`: 9 audit findings logged and 100% resolved.
   - 66 passing automated tests in 1.62s; clean production bundle build in 2.08s.
 
 ---
 
-## 3. Test Matrix Summary
+## 3. Milestone 4: Phase 2.2 — Primary-Source Data Integration, Evidence Verification & Recommendation Readiness
+- **Commit:** `[Current Phase 2.2 Commit]`
+- **Date:** 2026-10-13
+- **Delivered Capabilities:**
+  - **Financial Semantics Remediation (Workstream A):** Eliminated misleading `0.0` sentinels for loss-making issuers. Implemented `TypedFinancialMetric` and `MetricStatus` (VALID, NOT_APPLICABLE, DATA_UNAVAILABLE, CALCULATION_ERROR). Added explicit diagnostic reasons for negative/zero/missing EPS and undefined CAGR turnaround cases.
+  - **Primary-Source Registry & AMFI Connector (Workstream B & E):** Integrated official AMFI India statutory daily NAV file parser (`https://www.amfiindia.com/spages/NAVAll.txt`) supporting scheme code and ISIN lookup with robust cached snapshot fallback.
+  - **Category-Specific Freshness Policies (Workstream C):** Instituted `DataFreshnessRecord` defining independent freshness thresholds by data category (intraday price, daily NAV, monthly holdings, prospectus filing).
+  - **Prospectus Field Lineage & Ground-Truth Provenance (Workstream D & F):** Created `FieldLineageRecord` capturing PDF page numbers, exact quoted text, normalized values, and official SEBI URLs for `BAJAJHFL` and `TATATECH`.
+  - **Multi-Dimensional Recommendation Readiness Gates (Workstream G):** Replaced black-box scores with multi-dimensional gates (`ACTIVE_UNQUALIFIED`, `QUALIFIED_ADVISORY`, `BLOCKED_DEFICIENT`) covering business quality, financial quality, governance, valuation, and evidence integrity. Blocked listing-day pop promises.
+  - **Frontend Transparency (Workstream H):** Added statutory filing lineage inspector, recommendation readiness gate cards, and typed null-safe valuation displays in React interface.
+  - **Release Suite:** 80 passing automated backend tests in 1.63s; clean production frontend build in 2.37s.
+
+---
+
+## 4. Test Matrix Summary
 
 ```
-======================== 66 passed, 1 warning in 1.62s =========================
+======================== 80 passed, 1 warning in 1.63s =========================
 - test_api_endpoints.py: 11 passed (Health, Quote, Sync, Audit Records, Integrity, Companion, Sources, IPO, Funds, Export, Ingestion Upload)
 - test_audit_ledger.py: 2 passed (Sequential Hash-Chaining, Tampering Detection)
 - test_document_ingestion.py: 2 passed (Text/HTML Ingestion with Prompt Injection, Empty/Corrupt PDF Handling)
@@ -90,6 +105,7 @@
 - test_phase_2_1_extraction_security.py: 4 passed (Accounting Parentheses, Scanned PDF Diagnostic, Upload Size Cap, Injection Defense)
 - test_phase_2_1_fund_math.py: 5 passed (CAGR Reference, Direct Savings, Tracking Error Tolerance, Overlap Math, Benchmark Alignment)
 - test_phase_2_1_ipo_math.py: 5 passed (Issue Structure & Dilution, Promoter Bounds, CAGR Limits, Negative EPS, Bajaj Cross-Check)
+- test_phase_2_2_semantics_and_connectors.py: 14 passed (Negative/Zero/Missing EPS, CAGR Semantics, AMFI Parser & Lookup, IPO Lineage, Readiness Gates, Endpoints)
 - test_screen_ocr.py: 3 passed (Symbol Detection, Privacy Redaction, Pause Control)
 - test_source_registry.py: 2 passed (Default Sources Registered, Custom Source Registration)
 - test_valuation.py: 8 passed (Graham, DCF, Sensitivity Matrix, Bank Exclusion, Piotroski, Altman Z, Risk Metrics, Dossier)
@@ -97,11 +113,11 @@
 
 ---
 
-## 4. Unresolved Risks & Next Phase Roadmap
+## 5. Unresolved Risks & Next Phase Roadmap
 
 1. **Unresolved Risks:**
    - **External LLM Credentials:** `OPENAI_API_KEY` and `GROQ_API_KEY` remain optional. System operates reliably in offline demonstration/heuristic mode.
-   - **Multi-Page Scanned PDF OCR:** Ingestion pipeline supports searchable PDFs. Scanned image-only PDFs return explicit diagnostic failure messages; full multi-page optical OCR pipeline deferred to Phase 4 toolchain enhancements.
+   - **Multi-Page Scanned PDF OCR:** Ingestion pipeline supports searchable PDFs. Scanned image-only PDFs return explicit diagnostic failure messages; full optical OCR pipeline deferred to Phase 4 toolchain enhancements.
 2. **Next Milestone (Phase 3):**
    - Trading research & historical backtesting module.
    - Portfolio factor attribution and multi-asset risk parity modeling.

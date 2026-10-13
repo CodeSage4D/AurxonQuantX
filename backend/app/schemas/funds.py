@@ -8,6 +8,14 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
 
+from app.schemas.semantics import (
+    DataFreshnessRecord,
+    MetricStatus,
+    RecommendationReadinessGate,
+)
+from app.schemas.market import DataClassification
+
+
 class FundCategory(str, Enum):
     LARGE_CAP = "LARGE_CAP"
     MID_CAP = "MID_CAP"
@@ -51,13 +59,18 @@ class FundIdentity(BaseModel):
     inception_date: str
     is_passive: bool
     tracking_index: Optional[str] = None
+    as_of_date: Optional[str] = None
+    source_url: Optional[str] = None
+    data_classification: DataClassification = Field(default=DataClassification.HISTORICAL_VERIFIED)
 
 
 class FundRiskReturnMetrics(BaseModel):
-    cagr_1y_pct: float
-    cagr_3y_pct: float
-    cagr_5y_pct: float
-    cagr_since_inception_pct: float
+    cagr_1y_pct: Optional[float] = None
+    cagr_3y_pct: Optional[float] = None
+    cagr_5y_pct: Optional[float] = None
+    cagr_since_inception_pct: Optional[float] = None
+    cagr_status: MetricStatus = Field(default=MetricStatus.VALID)
+    cagr_reason: Optional[str] = None
 
     rolling_return_3y_min_pct: float
     rolling_return_3y_median_pct: float
@@ -71,6 +84,8 @@ class FundRiskReturnMetrics(BaseModel):
     beta_vs_benchmark: float
 
     tracking_error_pct: Optional[float] = Field(default=None, description="Annualized Tracking Error for ETFs/Index funds")
+    tracking_error_status: Optional[MetricStatus] = None
+    tracking_error_reason: Optional[str] = None
     tracking_difference_pct: Optional[float] = Field(default=None, description="Trailing 1Y Tracking Difference for ETFs")
 
     top_10_holdings_pct: float
@@ -88,6 +103,8 @@ class FundComparisonResult(BaseModel):
         description="Compound fee difference on ₹10 Lakhs over 10 years"
     )
     comparison_notes: List[str]
+    readiness_gate: Optional[RecommendationReadinessGate] = None
+    freshness_record: Optional[DataFreshnessRecord] = None
 
 
 class PortfolioAllocationPlan(BaseModel):
@@ -102,3 +119,5 @@ class PortfolioAllocationPlan(BaseModel):
     downside_stress_scenario_drawdown_pct: float
     key_risks_and_caveats: List[str]
     created_at: str
+    readiness_gate: Optional[RecommendationReadinessGate] = None
+    freshness_record: Optional[DataFreshnessRecord] = None

@@ -120,9 +120,11 @@ def test_negative_or_zero_eps_valuation_multiples():
         eps=-5.0,
         promoter_holding_pre_pct=60.0,
     )
-    # P/E ratio is not meaningful for loss-making firms and must be guarded as 0.0
-    assert arith_loss["pe_at_floor"] == 0.0
-    assert arith_loss["pe_at_cap"] == 0.0
+    # P/E ratio is not meaningful for loss-making firms and must be typed as null with NOT_APPLICABLE status
+    assert arith_loss["pe_at_floor"] is None
+    assert arith_loss["pe_at_cap"] is None
+    assert arith_loss["pe_status"] == "NOT_APPLICABLE"
+    assert "Loss-making" in arith_loss["pe_reason"]
 
 
 def test_bajaj_housing_rhp_cross_check():
