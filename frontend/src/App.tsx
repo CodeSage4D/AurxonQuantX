@@ -16,7 +16,6 @@ import { ModelInventoryView } from './components/ModelInventoryView';
 import { CompanyResearchView } from './components/CompanyResearchView';
 import { SourcesInspectionModal } from './components/SourcesInspectionModal';
 import {
-  Activity,
   Shield,
   FileCheck2,
   Lock,
@@ -162,13 +161,14 @@ export const App: React.FC = () => {
       {/* Top Navigation */}
       <header className="top-nav">
         <div className="brand-section">
-          <div className="brand-logo">
-            <Activity size={20} color="#ffffff" />
+          <div className="brand-logo" title="QuantX for Aurxon">
+            <span className="brand-logo-glyph">QX</span>
           </div>
-          <div>
-            <div className="brand-title">Aurxon QuantX</div>
+          <div className="brand-title-wrap">
+            <span className="brand-title-main">QuantX</span>
+            <span className="brand-title-sub">for Aurxon</span>
           </div>
-          <span className="brand-badge">PHASE 4.2 LIVE</span>
+          <span className="brand-badge">PHASE 4.3 AUDITED</span>
         </div>
 
         {/* View Switcher Tabs */}

@@ -211,3 +211,22 @@
    - Factor attribution and risk parity engine under Indian market stress scenarios.
    - Real-time market tick feed integration for live-paper market streaming.
 
+---
+
+## 6. Phase 4.3 — Independent Acceptance Audit & Adversarial Hardening (2026-10-13)
+
+- **Baseline Commit:** `e663bb17c6760760c74bdc7a9e550953d7c7c1fb` (tagged `checkpoint-phase-4-3-start`)
+- **Milestone Objective:** Independent acceptance audit, adversarial validation, and production-readiness gate across Roles A–H and Gates A–G.
+- **Brand Identity Updated:** **QuantX for Aurxon** with gradient typography and styled `QX` monogram icon.
+- **Key Defect Remediations:**
+  - Fixed quote time vs retrieval time conflation in `nse_connector.py` via `regularMarketTime` extraction.
+  - Fixed `is_financial_institution` method mismatch in `NSEDataConnector`.
+  - Loosened calendar bar requirement in `company_quant.py` to allow valid Indian equity annual returns when $N \ge 245$ bars exist over a 365-day calendar span.
+- **Test Results:**
+  - Offline Backend Test Suite: **170 passed, 2 skipped** (in 2.55s).
+  - Opt-in Live Network Suite: **12 passed, 2 skipped** (in 5.40s).
+  - Frontend Production Build: **Clean compilation** (in 2.16s).
+  - Acceptance Test Suite: `backend/tests/test_phase_4_3_acceptance_audit.py` (10 passed).
+- **Milestone Decision:** **CONDITIONAL PASS** (Approved for research and paper trading; commercial tick redistribution bounded). Phase 5 remains strictly prohibited until approved.
+
+

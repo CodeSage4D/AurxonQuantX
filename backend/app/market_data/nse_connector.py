@@ -196,6 +196,8 @@ class NSEDataConnector:
             return True
         return False
 
+    is_financial_institution = is_financial_sector
+
     def evaluate_freshness(self, retrieved_at_iso: str) -> FreshnessStatus:
         """Computes freshness status based on timestamp age."""
         try:
@@ -229,6 +231,14 @@ class NSEDataConnector:
                     sector = info.get("sector", "Indian Equities")
                     is_fin = self.is_financial_institution(clean_symbol, sector)
                     
+                    market_ts = now_iso
+                    reg_market_time = info.get("regularMarketTime")
+                    if reg_market_time and isinstance(reg_market_time, (int, float)) and reg_market_time > 0:
+                        try:
+                            market_ts = datetime.fromtimestamp(reg_market_time, tz=timezone.utc).isoformat()
+                        except Exception:
+                            market_ts = now_iso
+
                     quote = MarketQuote(
                         symbol=yf_symbol,
                         clean_ticker=clean_symbol,
@@ -241,7 +251,7 @@ class NSEDataConnector:
                         currency=info.get("currency", "INR"),
                         price_units="INR per share",
                         current_price=float(price),
-                        market_timestamp=now_iso,
+                        market_timestamp=market_ts,
                         retrieval_timestamp=now_iso,
                         eps=float(info.get("trailingEps") or 0.0),
                         bvps=float(info.get("bookValue") or 0.0),
