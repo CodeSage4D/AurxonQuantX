@@ -135,6 +135,9 @@ export interface DataFreshnessRecord {
   age_hours: number;
   is_stale: boolean;
   stale_warning?: string | null;
+  is_versioned_legal_document?: boolean;
+  filing_version?: string | null;
+  is_superseded?: boolean;
 }
 
 export interface IssueStructure {

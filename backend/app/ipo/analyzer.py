@@ -537,15 +537,18 @@ class IPOAnalyzer:
             },
         )
 
-        # Freshness record
+        # Freshness record: Treated as versioned statutory legal document (not invalidated by elapsed calendar time)
         freshness = DataFreshnessRecord(
             data_type=FreshnessCategory.IPO_PROSPECTUS,
             observation_date=data.get("filing_date", "2024-09-03"),
             as_of_timestamp=datetime.now(timezone.utc).isoformat(),
-            max_permitted_age_hours=2160.0,  # 90 days validity for RHP
+            max_permitted_age_hours=87600.0,  # Statutory documents retain legal evidentiary validity
             age_hours=720.0,
             is_stale=False,
             stale_warning=None,
+            is_versioned_legal_document=True,
+            filing_version=data.get("filing_type", "RHP"),
+            is_superseded=False,
         )
 
         return IPODossier(

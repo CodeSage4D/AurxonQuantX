@@ -82,7 +82,7 @@ class FreshnessCategory(str, Enum):
 
 
 class DataFreshnessRecord(BaseModel):
-    """Tracks time decay and freshness by financial data type."""
+    """Tracks time decay and freshness by financial data type, with legal document versioning."""
     data_type: FreshnessCategory
     observation_date: str
     as_of_timestamp: str
@@ -90,6 +90,9 @@ class DataFreshnessRecord(BaseModel):
     age_hours: float
     is_stale: bool
     stale_warning: Optional[str] = None
+    is_versioned_legal_document: bool = False
+    filing_version: Optional[str] = None  # e.g., "RHP", "DRHP", "ADDENDUM"
+    is_superseded: bool = False
 
 
 class RecommendationStatus(str, Enum):

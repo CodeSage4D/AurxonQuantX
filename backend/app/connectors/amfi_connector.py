@@ -16,6 +16,7 @@ from app.schemas.market import DataClassification, FreshnessStatus
 
 logger = logging.getLogger("aurxon.connectors.amfi")
 
+AMFI_PORTAL_NAV_URL = "https://portal.amfiindia.com/spages/NAVAll.txt"
 AMFI_NAV_ALL_URL = "https://www.amfiindia.com/spages/NAVAll.txt"
 
 # Verified local snapshot for offline/sandboxed operation
@@ -39,7 +40,7 @@ class AMFINavRecord(BaseModel):
     freshness: FreshnessStatus
     is_direct_plan: bool
     is_growth_option: bool
-    source_url: str = AMFI_NAV_ALL_URL
+    source_url: str = AMFI_PORTAL_NAV_URL
     retrieval_timestamp: str
 
 
@@ -69,37 +70,53 @@ class AMFIConnector:
                 continue
 
             parts = line.split(";")
-            if len(parts) >= 6:
+            if len(parts) >= 8:
+                # 8-column format: Code;ISIN Growth;ISIN Reinv;Name;Plan;Option;NAV;Date
                 code = parts[0].strip()
-                isin_growth = parts[1].strip() if parts[1].strip() else None
-                isin_reinv = parts[2].strip() if parts[2].strip() else None
+                isin_growth = parts[1].strip() if parts[1].strip() and parts[1].strip() != "-" else None
+                isin_reinv = parts[2].strip() if parts[2].strip() and parts[2].strip() != "-" else None
+                base_name = parts[3].strip()
+                plan_str = parts[4].strip()
+                option_str = parts[5].strip()
+                nav_str = parts[6].strip()
+                date_str = parts[7].strip()
+                scheme_name = f"{base_name} - {plan_str} - {option_str}" if plan_str else base_name
+                is_direct = "DIRECT" in f"{base_name} {plan_str}".upper()
+                is_growth = "GROWTH" in f"{base_name} {option_str}".upper()
+            elif len(parts) >= 6:
+                # 6-column format: Code;ISIN Growth;ISIN Reinv;Name;NAV;Date
+                code = parts[0].strip()
+                isin_growth = parts[1].strip() if parts[1].strip() and parts[1].strip() != "-" else None
+                isin_reinv = parts[2].strip() if parts[2].strip() and parts[2].strip() != "-" else None
                 scheme_name = parts[3].strip()
                 nav_str = parts[4].strip()
                 date_str = parts[5].strip()
-
-                try:
-                    nav_val = float(nav_str)
-                except ValueError:
-                    continue
-
                 is_direct = "DIRECT" in scheme_name.upper()
                 is_growth = "GROWTH" in scheme_name.upper()
+            else:
+                continue
 
-                rec = AMFINavRecord(
-                    scheme_code=code,
-                    isin_growth=isin_growth,
-                    isin_reinvestment=isin_reinv,
-                    scheme_name=scheme_name,
-                    nav=nav_val,
-                    nav_date=date_str,
-                    classification=classification,
-                    freshness=freshness,
-                    is_direct_plan=is_direct,
-                    is_growth_option=is_growth,
-                    retrieval_timestamp=now_iso,
-                )
-                parsed[code] = rec
-                self._memory_cache[code] = rec
+            try:
+                nav_val = float(nav_str)
+            except ValueError:
+                continue
+
+            rec = AMFINavRecord(
+                scheme_code=code,
+                isin_growth=isin_growth,
+                isin_reinvestment=isin_reinv,
+                scheme_name=scheme_name,
+                nav=nav_val,
+                nav_date=date_str,
+                classification=classification,
+                freshness=freshness,
+                is_direct_plan=is_direct,
+                is_growth_option=is_growth,
+                source_url=AMFI_PORTAL_NAV_URL if is_live else AMFI_NAV_ALL_URL,
+                retrieval_timestamp=now_iso,
+            )
+            parsed[code] = rec
+            self._memory_cache[code] = rec
 
         return parsed
 
@@ -107,15 +124,20 @@ class AMFIConnector:
         """Attempts to fetch live official AMFI statutory NAV file.
         Gracefully falls back to cached snapshot when offline or in sandbox.
         """
-        try:
-            async with httpx.AsyncClient(timeout=3.0) as client:
-                res = await client.get(AMFI_NAV_ALL_URL)
-                if res.status_code == 200 and len(res.text) > 1000:
-                    logger.info("Successfully fetched live AMFI NAV file (%d bytes)", len(res.text))
-                    return self._parse_amfi_text(res.text, is_live=True)
-        except Exception as exc:
-            logger.warning("Live AMFI fetch failed (%s); using verified cached snapshot.", exc)
+        urls_to_try = [AMFI_PORTAL_NAV_URL, AMFI_NAV_ALL_URL]
+        headers = {"User-Agent": "AURXONQuant/1.0 (+https://aurxon.local; private research workstation)"}
 
+        for url in urls_to_try:
+            try:
+                async with httpx.AsyncClient(timeout=10.0, follow_redirects=True, headers=headers) as client:
+                    res = await client.get(url)
+                    if res.status_code == 200 and len(res.text) > 1000:
+                        logger.info("Successfully fetched live AMFI NAV file from %s (%d bytes)", url, len(res.text))
+                        return self._parse_amfi_text(res.text, is_live=True)
+            except Exception as exc:
+                logger.warning("AMFI fetch attempt for %s failed (%s)", url, exc)
+
+        logger.warning("All live AMFI endpoints failed or unreachable; using verified cached snapshot.")
         return self._memory_cache
 
     def parse_nav_file(self, text: str, is_live: bool = False) -> Dict[str, AMFINavRecord]:
