@@ -76,6 +76,7 @@ class PaperPortfolioManager:
                     name TEXT NOT NULL,
                     initial_cash REAL NOT NULL,
                     current_cash REAL NOT NULL,
+                    peak_equity REAL NOT NULL DEFAULT 0.0,
                     kill_switch_active INTEGER NOT NULL DEFAULT 0,
                     risk_limits_json TEXT NOT NULL,
                     created_at TEXT NOT NULL,
@@ -83,6 +84,10 @@ class PaperPortfolioManager:
                 )
                 """
             )
+            try:
+                conn.execute("ALTER TABLE paper_portfolios ADD COLUMN peak_equity REAL NOT NULL DEFAULT 0.0")
+            except Exception:
+                pass
 
             conn.execute(
                 """
@@ -117,6 +122,7 @@ class PaperPortfolioManager:
                     executed_quantity INTEGER NOT NULL DEFAULT 0,
                     turnover REAL NOT NULL DEFAULT 0.0,
                     transaction_costs REAL NOT NULL DEFAULT 0.0,
+                    realized_pnl REAL NOT NULL DEFAULT 0.0,
                     cost_breakdown_json TEXT,
                     rejection_reason TEXT,
                     data_provenance TEXT NOT NULL,
@@ -127,6 +133,10 @@ class PaperPortfolioManager:
                 )
                 """
             )
+            try:
+                conn.execute("ALTER TABLE paper_orders ADD COLUMN realized_pnl REAL NOT NULL DEFAULT 0.0")
+            except Exception:
+                pass
             conn.execute("CREATE INDEX IF NOT EXISTS idx_orders_port ON paper_orders(portfolio_id)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_orders_status ON paper_orders(status)")
 
@@ -175,13 +185,14 @@ class PaperPortfolioManager:
                 cursor.execute(
                     """
                     INSERT INTO paper_portfolios (
-                        portfolio_id, name, initial_cash, current_cash, kill_switch_active,
+                        portfolio_id, name, initial_cash, current_cash, peak_equity, kill_switch_active,
                         risk_limits_json, created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         portfolio_id,
                         name,
+                        initial_cash,
                         initial_cash,
                         initial_cash,
                         0,
@@ -206,7 +217,7 @@ class PaperPortfolioManager:
             cursor = conn.cursor()
             cursor.execute(
                 """
-                SELECT portfolio_id, name, initial_cash, current_cash, kill_switch_active,
+                SELECT portfolio_id, name, initial_cash, current_cash, peak_equity, kill_switch_active,
                        risk_limits_json, created_at, updated_at
                 FROM paper_portfolios WHERE portfolio_id = ?
                 """,
@@ -216,7 +227,7 @@ class PaperPortfolioManager:
             if not port_row:
                 return self.get_or_create_portfolio(portfolio_id)
 
-            p_id, name, init_cash, curr_cash, kill_switch, limits_json, created_at, updated_at = port_row
+            p_id, name, init_cash, curr_cash, stored_peak_eq, kill_switch, limits_json, created_at, updated_at = port_row
             risk_limits = RiskLimits(**json.loads(limits_json))
             risk_limits.kill_switch_active = bool(kill_switch)
 
@@ -261,6 +272,19 @@ class PaperPortfolioManager:
                 )
 
             total_equity = round(curr_cash + total_positions_val, 2)
+            peak_equity = max(stored_peak_eq or 0.0, total_equity)
+            if peak_equity > (stored_peak_eq or 0.0):
+                cursor.execute(
+                    "UPDATE paper_portfolios SET peak_equity = ? WHERE portfolio_id = ?",
+                    (peak_equity, portfolio_id),
+                )
+                conn.commit()
+
+            current_drawdown_pct = (
+                round(((peak_equity - total_equity) / peak_equity) * 100.0, 2)
+                if peak_equity > 0
+                else 0.0
+            )
 
             # Weight calculations
             if total_equity > 0:
@@ -291,6 +315,8 @@ class PaperPortfolioManager:
                 current_cash=round(curr_cash, 2),
                 positions_value=round(total_positions_val, 2),
                 total_equity=total_equity,
+                peak_equity=round(peak_equity, 2),
+                current_drawdown_pct=current_drawdown_pct,
                 total_realized_pnl=round(total_realized_pnl, 2),
                 total_unrealized_pnl=round(total_unrealized_pnl, 2),
                 total_transaction_costs_paid=round(costs_sum, 2),
@@ -367,6 +393,19 @@ class PaperPortfolioManager:
                     freshness=freshness,
                 )
 
+            # Stale market data check
+            if risk_limits.reject_stale_prices and freshness == FreshnessStatus.STALE_WARNING:
+                return self._create_and_persist_rejected_order(
+                    conn=conn,
+                    order_id=order_id,
+                    req=req,
+                    reason=f"STALE_MARKET_DATA: Market quote for '{clean_sym}' has freshness '{freshness.value}'. Execution blocked to protect against stale pricing.",
+                    now_iso=now_iso,
+                    provenance=provenance_src,
+                    classification=classification,
+                    freshness=freshness,
+                )
+
             # -------------------------------------------------------------
             # 4. INDEPENDENT RISK LIMIT CHECKS
             # -------------------------------------------------------------
@@ -377,6 +416,89 @@ class PaperPortfolioManager:
                     order_id=order_id,
                     req=req,
                     reason=f"RISK_LIMIT_EXCEEDED: Order turnover ₹{estimated_turnover:,.2f} exceeds max order value limit of ₹{risk_limits.max_order_value_inr:,.2f}.",
+                    now_iso=now_iso,
+                    provenance=provenance_src,
+                    classification=classification,
+                    freshness=freshness,
+                )
+
+            # Daily stop-loss check (realized loss + optional unrealized loss)
+            today_str = now_iso[:10]
+            cursor.execute(
+                """
+                SELECT coalesce(sum(realized_pnl), 0.0)
+                FROM paper_orders
+                WHERE portfolio_id = ? AND status = 'FILLED' AND filled_at LIKE ? AND side = 'SELL'
+                """,
+                (req.portfolio_id, f"{today_str}%"),
+            )
+            today_net_realized_pnl = cursor.fetchone()[0] or 0.0
+            today_realized_loss = abs(today_net_realized_pnl) if today_net_realized_pnl < 0 else 0.0
+
+            today_unrealized_loss = 0.0
+            if risk_limits.include_unrealized_in_daily_loss:
+                cursor.execute(
+                    """
+                    SELECT quantity, average_cost, current_price
+                    FROM paper_positions
+                    WHERE portfolio_id = ? AND quantity > 0
+                    """,
+                    (req.portfolio_id,),
+                )
+                for pos_q, pos_ac, pos_cp in cursor.fetchall():
+                    pos_pnl = (pos_cp - pos_ac) * pos_q
+                    if pos_pnl < 0:
+                        today_unrealized_loss += abs(pos_pnl)
+
+            total_daily_loss = today_realized_loss + today_unrealized_loss
+            if total_daily_loss > risk_limits.max_daily_loss_inr:
+                return self._create_and_persist_rejected_order(
+                    conn=conn,
+                    order_id=order_id,
+                    req=req,
+                    reason=(
+                        f"DAILY_STOP_LOSS_EXCEEDED: Cumulative daily loss ₹{total_daily_loss:,.2f} "
+                        f"(realized=₹{today_realized_loss:,.2f}, unrealized=₹{today_unrealized_loss:,.2f}) "
+                        f"exceeds daily stop-loss limit of ₹{risk_limits.max_daily_loss_inr:,.2f}."
+                    ),
+                    now_iso=now_iso,
+                    provenance=provenance_src,
+                    classification=classification,
+                    freshness=freshness,
+                )
+
+            # Max drawdown check from peak portfolio equity
+            cursor.execute(
+                "SELECT peak_equity FROM paper_portfolios WHERE portfolio_id = ?",
+                (req.portfolio_id,),
+            )
+            peak_eq_row = cursor.fetchone()
+            peak_eq = peak_eq_row[0] if (peak_eq_row and peak_eq_row[0]) else current_cash
+
+            cursor.execute(
+                "SELECT sum(quantity * current_price) FROM paper_positions WHERE portfolio_id = ? AND quantity > 0",
+                (req.portfolio_id,),
+            )
+            total_pos_val = cursor.fetchone()[0] or 0.0
+            curr_equity = current_cash + total_pos_val
+            if curr_equity > peak_eq:
+                peak_eq = curr_equity
+                cursor.execute(
+                    "UPDATE paper_portfolios SET peak_equity = ? WHERE portfolio_id = ?",
+                    (peak_eq, req.portfolio_id),
+                )
+
+            current_dd_pct = ((peak_eq - curr_equity) / peak_eq * 100.0) if peak_eq > 0 else 0.0
+            if current_dd_pct > risk_limits.max_drawdown_pct and req.side == PaperOrderSide.BUY:
+                return self._create_and_persist_rejected_order(
+                    conn=conn,
+                    order_id=order_id,
+                    req=req,
+                    reason=(
+                        f"MAX_DRAWDOWN_EXCEEDED: Current portfolio drawdown {current_dd_pct:.1f}% "
+                        f"exceeds maximum allowed drawdown threshold of {risk_limits.max_drawdown_pct:.1f}%. "
+                        f"New buy orders are restricted."
+                    ),
                     now_iso=now_iso,
                     provenance=provenance_src,
                     classification=classification,
@@ -597,15 +719,16 @@ class PaperPortfolioManager:
                 "gst": cost_breakdown.gst,
                 "slippage_bps": cost_breakdown.slippage_bps,
             }
+            order_realized_pnl = trade_realized_pnl if req.side == PaperOrderSide.SELL else 0.0
 
             cursor.execute(
                 """
                 INSERT INTO paper_orders (
                     order_id, idempotency_key, portfolio_id, symbol, side, order_type, quantity,
                     limit_price, status, submitted_at, filled_at, fill_price, executed_quantity,
-                    turnover, transaction_costs, cost_breakdown_json, rejection_reason,
+                    turnover, transaction_costs, realized_pnl, cost_breakdown_json, rejection_reason,
                     data_provenance, data_classification, freshness_status, is_demonstration, notes
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     order_id,
@@ -623,6 +746,7 @@ class PaperPortfolioManager:
                     req.quantity,
                     turnover,
                     total_costs,
+                    order_realized_pnl,
                     json.dumps(cost_dict),
                     None,
                     provenance_src,

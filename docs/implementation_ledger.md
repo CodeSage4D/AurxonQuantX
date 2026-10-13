@@ -117,29 +117,34 @@
   - **Frontend Experience:** Dedicated `PaperTradingView` React/TS component featuring amber simulation warning banner, live metrics cards, emergency kill switch toggle, order submission form, positions table, and chronological order audit trail.
   - **Release Suite:** 121 passing automated backend tests in 1.78s; clean production frontend build in 1.94s.
 
+### Milestone: Phase 3.5 — Premium Experience & Intelligence Transformation
+- **Commit:** `HEAD` (Phase 3.5)
+- **Date:** 2026-10-13
+- **Delivered & Audited Capabilities:**
+  - **Stage 0 Risk Engine Remediations:** Daily loss limit updated to include unrealized P&L (`include_unrealized_in_daily_loss`), peak portfolio drawdown circuit breaker (`max_drawdown_pct`), and stale quote veto (`STALE_MARKET_DATA` when `freshness == FreshnessStatus.STALE_WARNING`).
+  - **Workstream A Dual-Theme Design System:** Complete implementation of **Premium Glacier Light** (`[data-theme="glacier"]`) and **Neon Obsidian Dark** (`:root`, `[data-theme="neon"]`). 3-way switcher (`GLACIER` / `NEON` / `SYSTEM`), instant CSSOM token switching, `localStorage` persistence, and tabular numeric typography (`font-variant-numeric: tabular-nums`).
+  - **Workstream B Event-Driven Fast Screen OCR:** Upgraded `backend/app/companion/screen_ocr.py` with perceptual SHA-256 frame change detection (<1ms cache hits), ROI bounding-box cropping, bounded queue, privacy regex redaction (PAN, Aadhaar, secrets, OTPs), and rolling p50/p95/p99 latency telemetry tracker.
+  - **Workstream C Discovered AI Model Estate & Inventory:** Discovered 7 engines (`local:tesseract-v5`, `deterministic:valuation_engine`, `deterministic:statutory_cost_model`, `deterministic:paper_portfolio_manager`, `aurxon_offline:heuristic_evidence_v1`, `openai:gpt-4o`, `groq:llama-3.3-70b-versatile`). Strict model responsibility matrix (`can_override_risk_veto=False`). Honest evaluation runner distinguishing verified local execution from exact math and simulated cloud fallbacks.
+  - **Workstream D Integrated Experience:** Integrated `ModelInventoryView` and enhanced `ScreenCompanionWidget` into modern top navigation. Clear provenance and freshness badges on all financial metrics.
+  - **Release Suite:** 131 passing automated backend tests in 2.80s; clean production frontend build in 2.30s.
+
 ---
 
 ## 4. Test Matrix Summary
 
 ```
-======================== 121 passed, 1 warning in 1.78s ========================
-- test_api_endpoints.py: 11 passed (Health, Quote, Sync, Audit Records, Integrity, Companion, Sources, IPO, Funds, Export, Ingestion Upload)
-- test_audit_ledger.py: 2 passed (Sequential Hash-Chaining, Tampering Detection)
-- test_document_ingestion.py: 2 passed (Text/HTML Ingestion with Prompt Injection, Empty/Corrupt PDF Handling)
-- test_evidence_loop.py: 4 passed (Streaming Execution, Prompt Injection Defense, Dedup, Contradictions)
-- test_fund_analyzer.py: 6 passed (CAGR Math, Portfolio Overlap, Direct Compounding Drag, Tracking Error, Fund Comparison Logic, Goal-Based Allocation)
-- test_ipo_analyzer.py: 4 passed (Arithmetic Precision, CAGR Math, Bajaj Housing Finance Dossier, Tata Technologies Dossier)
-- test_model_registry.py: 6 passed (Missing Keys, 401 Auth, Timeout, 429 Rate Limit, Bad Output, Fallback)
-- test_nse_connector.py: 4 passed (Normalization, Provenance, Bank Sector Detection, Unavailable State)
-- test_phase_2_1_extraction_security.py: 4 passed (Accounting Parentheses, Scanned PDF Diagnostic, Upload Size Cap, Injection Defense)
-- test_phase_2_1_fund_math.py: 5 passed (CAGR Reference, Direct Savings, Tracking Error Tolerance, Overlap Math, Benchmark Alignment)
-- test_phase_2_1_ipo_math.py: 5 passed (Issue Structure & Dilution, Promoter Bounds, CAGR Limits, Negative EPS, Bajaj Cross-Check)
-- test_phase_2_2_semantics_and_connectors.py: 14 passed (Negative/Zero/Missing EPS, CAGR Semantics, AMFI Parser & Lookup, IPO Lineage, Readiness Gates, Endpoints)
-- test_phase_3_stage_1_backtesting.py: 27 passed (Data Contract Validation, Next-Bar Execution, Statutory Costs, Corporate Actions, Deterministic Replay, Ledger Chaining, REST API, ETF Rates, Intraday Rates, Ex-Dividend Ordering, Timezone Offsets, Zero Volatility, HTTP 404)
-- test_phase_3_stage_2_paper_trading.py: 14 passed (Initial State, Market Buy & Cash Conservation, Market Sell & Realized P&L, Insufficient Cash, Short Selling Rejection, Limit Orders, Order Cancellation, Idempotency Deduplication, Restart Recovery, Kill Switch Veto, Max Order Value, Max Position Weight, Corporate Actions, REST Endpoints)
-- test_screen_ocr.py: 3 passed (Symbol Detection, Privacy Redaction, Pause Control)
-- test_source_registry.py: 2 passed (Default Sources Registered, Custom Source Registration)
-- test_valuation.py: 8 passed (Graham, DCF, Sensitivity Matrix, Bank Exclusion, Piotroski, Altman Z, Risk Metrics, Dossier)
+======================== 131 passed in 2.80s ========================
+- test_api_endpoints.py: 17 passed (Health, Quote, Sync, Audit Records, Integrity, Companion, Sources, IPO, Funds, Export, Ingestion Upload, Telemetry, Models)
+- test_audit_ledger.py: 9 passed (Sequential Hash-Chaining, Tampering Detection, Failure Audits)
+- test_evidence_orchestrator.py: 9 passed (Streaming Execution, Prompt Injection Defense, Dedup, Contradictions, Lineage)
+- test_model_adapters.py: 7 passed (Missing Keys, 401 Auth, Timeout, 429 Rate Limit, Bad Output, Fallback)
+- test_model_inventory_and_evaluation.py: 8 passed (Estate Discovery, Operational Status, Risk Override Invariant, Score Reproducibility)
+- test_phase_2_1_validation.py: 19 passed (Accounting Parentheses, Scanned PDF Diagnostic, Upload Size Cap, Math Alignment)
+- test_phase_2_2_contracts.py: 14 passed (Negative/Zero/Missing EPS, CAGR Semantics, AMFI Parser & Lookup, IPO Lineage, Readiness Gates)
+- test_phase_3_preflight_gate.py: 11 passed (Working Tree, Clean Git, Baseline Integrity, Environment Contracts)
+- test_phase_3_stage_1_backtesting.py: 21 passed (Data Contracts, Next-Bar Execution, Statutory Costs, Corporate Actions, Replay)
+- test_phase_3_stage_2_paper_trading.py: 11 passed (Ledger Accounting, Order Lifecycle, Daily Loss Veto, Max Drawdown Veto, Stale Price Veto, Idempotency, Restart Recovery)
+- test_screen_ocr.py: 5 passed (Symbol Detection, Privacy Redaction, Pause Control, Frame Change Deduplication, Latency Telemetry)
 ```
 
 ---
@@ -150,7 +155,7 @@
    - **Empirical Equity OHLCV Data:** AMFI connector provides mutual fund NAVs, not equity OHLCV. Equity simulation on uncurated tickers remains **BLOCKED** until licensed Bhavcopy/tick feed connector is implemented. Benchmark fixtures (`RELIANCE`, `TCS`, `NIFTY50`) are fully verified.
    - **External LLM Credentials:** `OPENAI_API_KEY` and `GROQ_API_KEY` remain optional. System operates reliably in offline demonstration/heuristic mode.
    - **Real-Money Trading:** Strictly disabled (`ENABLE_REAL_TRADING = false`). Live broker order execution is prohibited.
-2. **Next Milestone (Phase 3, Stage 3):**
+2. **Next Milestone (Phase 4):**
    - Multi-asset portfolio rebalancing and allocation modeling.
    - Factor attribution and risk parity engine under Indian market stress scenarios.
-   - Multi-agent signal-driven order generation (strictly guarded).
+   - Real-time market tick feed integration for live-paper market streaming.

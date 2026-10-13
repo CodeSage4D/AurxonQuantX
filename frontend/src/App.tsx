@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ResearchFinding,
   ResearchObjective,
@@ -12,6 +12,7 @@ import { AuditLedgerModal } from './components/AuditLedgerModal';
 import { IPOResearchView } from './components/IPOResearchView';
 import { FundResearchView } from './components/FundResearchView';
 import { PaperTradingView } from './components/PaperTradingView';
+import { ModelInventoryView } from './components/ModelInventoryView';
 import { SourcesInspectionModal } from './components/SourcesInspectionModal';
 import {
   Activity,
@@ -26,9 +27,14 @@ import {
   Layers,
   Database,
   TrendingUp,
+  Cpu,
+  Sun,
+  Moon,
+  Laptop,
 } from 'lucide-react';
 
-type TabView = 'EQUITIES' | 'IPO' | 'MUTUAL_FUNDS' | 'PAPER_TRADING';
+type TabView = 'EQUITIES' | 'IPO' | 'MUTUAL_FUNDS' | 'PAPER_TRADING' | 'MODELS';
+type ThemePreference = 'GLACIER' | 'NEON' | 'SYSTEM';
 
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabView>('EQUITIES');
@@ -37,6 +43,31 @@ export const App: React.FC = () => {
   const [activeEvent, setActiveEvent] = useState<StreamEvent | null>(null);
   const [showLedger, setShowLedger] = useState(false);
   const [showSources, setShowSources] = useState(false);
+  const [themePreference, setThemePreference] = useState<ThemePreference>(() => {
+    return (localStorage.getItem('aurxon_theme_preference') as ThemePreference) || 'NEON';
+  });
+
+  useEffect(() => {
+    const applyTheme = () => {
+      let resolved = themePreference;
+      if (themePreference === 'SYSTEM') {
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        resolved = prefersDark ? 'NEON' : 'GLACIER';
+      }
+      const themeAttr = resolved === 'GLACIER' ? 'glacier' : 'neon';
+      document.documentElement.setAttribute('data-theme', themeAttr);
+      localStorage.setItem('aurxon_theme_preference', themePreference);
+    };
+
+    applyTheme();
+
+    if (themePreference === 'SYSTEM') {
+      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+      const listener = () => applyTheme();
+      mediaQuery.addEventListener('change', listener);
+      return () => mediaQuery.removeEventListener('change', listener);
+    }
+  }, [themePreference]);
 
   const handleRunResearch = async (objective: ResearchObjective, modelKey: string) => {
     setIsLoading(true);
@@ -135,7 +166,7 @@ export const App: React.FC = () => {
           <div>
             <div className="brand-title">AURXON</div>
           </div>
-          <span className="brand-badge">PHASE 2 HUB</span>
+          <span className="brand-badge">PHASE 3.5 QUANT</span>
         </div>
 
         {/* View Switcher Tabs */}
@@ -172,9 +203,45 @@ export const App: React.FC = () => {
           >
             <TrendingUp size={14} /> Paper Portfolio
           </button>
+          <button
+            type="button"
+            className={`chip-btn ${activeTab === 'MODELS' ? 'active' : ''}`}
+            onClick={() => setActiveTab('MODELS')}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+          >
+            <Cpu size={14} /> AI Models & Engines
+          </button>
         </div>
 
         <div className="nav-controls">
+          {/* Theme Switcher Control */}
+          <div className="theme-switcher">
+            <button
+              type="button"
+              className={`theme-btn ${themePreference === 'GLACIER' ? 'active' : ''}`}
+              onClick={() => setThemePreference('GLACIER')}
+              title="Glacier Light Theme"
+            >
+              <Sun size={12} /> Light
+            </button>
+            <button
+              type="button"
+              className={`theme-btn ${themePreference === 'NEON' ? 'active' : ''}`}
+              onClick={() => setThemePreference('NEON')}
+              title="Neon Obsidian Dark Theme"
+            >
+              <Moon size={12} /> Dark
+            </button>
+            <button
+              type="button"
+              className={`theme-btn ${themePreference === 'SYSTEM' ? 'active' : ''}`}
+              onClick={() => setThemePreference('SYSTEM')}
+              title="System Theme"
+            >
+              <Laptop size={12} /> Auto
+            </button>
+          </div>
+
           <button
             type="button"
             className="chip-btn"
@@ -335,6 +402,13 @@ export const App: React.FC = () => {
         </main>
       )}
 
+      {/* Tab: AI Models & Engines */}
+      {activeTab === 'MODELS' && (
+        <main style={{ padding: '24px', maxWidth: '1400px', margin: '0 auto', width: '100%' }}>
+          <ModelInventoryView />
+        </main>
+      )}
+
       {/* Screen Companion Live Bottom Bar */}
       <footer className="companion-bar">
         <div className="companion-left">
@@ -345,6 +419,7 @@ export const App: React.FC = () => {
             <span className="companion-tag">MUTUAL FUNDS</span>
             <span className="companion-tag">ETFs</span>
             <span className="companion-tag" style={{ borderColor: 'var(--accent-amber)', color: 'var(--accent-amber)' }}>PAPER SIMULATOR</span>
+            <span className="companion-tag" style={{ borderColor: 'var(--accent-blue)', color: 'var(--accent-blue)' }}>AI MODELS & ENGINES</span>
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-dim)', fontSize: '0.75rem' }}>

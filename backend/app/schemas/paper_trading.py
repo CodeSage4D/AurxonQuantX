@@ -54,6 +54,15 @@ class RiskLimits(BaseModel):
     max_daily_loss_inr: float = Field(
         default=50000.0, description="Daily stop-loss limit (₹50,000)"
     )
+    include_unrealized_in_daily_loss: bool = Field(
+        default=True, description="Whether daily stop-loss accounts for unrealized mark-to-market drawdown"
+    )
+    max_drawdown_pct: float = Field(
+        default=15.0, description="Maximum portfolio drawdown limit from peak equity (15.0%)"
+    )
+    reject_stale_prices: bool = Field(
+        default=True, description="Strictly veto execution if market price is stale or expired"
+    )
     kill_switch_active: bool = Field(
         default=False, description="Emergency kill switch blocking all new simulated orders"
     )
@@ -123,6 +132,8 @@ class PaperPortfolioState(BaseModel):
     current_cash: float
     positions_value: float
     total_equity: float
+    peak_equity: float = 0.0
+    current_drawdown_pct: float = 0.0
     total_realized_pnl: float
     total_unrealized_pnl: float
     total_transaction_costs_paid: float

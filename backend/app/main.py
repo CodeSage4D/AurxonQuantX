@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
@@ -18,6 +18,7 @@ from app.companion.screen_ocr import screen_companion
 from app.config import settings
 from app.evidence.ledger import audit_ledger
 from app.market_data.nse_connector import NSEDataConnector
+from app.model_adapters.inventory import model_inventory_manager
 from app.model_adapters.registry import model_registry
 from app.orchestration.evidence_loop import evidence_loop_workflow
 from app.schemas.research import (
@@ -476,6 +477,57 @@ async def process_companion_context(req: CompanionContextRequest) -> Dict[str, A
         screen_companion.paused = req.paused
 
     return screen_companion.process_screen_context(manual_text=req.manual_text)
+
+
+@app.get("/api/v1/companion/telemetry")
+async def get_companion_telemetry() -> Dict[str, Any]:
+    """Returns aggregated p50, p95, p99 latency percentiles and cache throughput."""
+    return screen_companion.get_telemetry_metrics()
+
+
+@app.post("/api/v1/companion/clear")
+async def clear_companion_state() -> Dict[str, Any]:
+    """Clears cached frame hash and screen context."""
+    screen_companion.clear_state()
+    return {"status": "CLEARED"}
+
+
+@app.post("/api/v1/companion/upload")
+async def upload_companion_frame(file: UploadFile = File(...)) -> Dict[str, Any]:
+    """Uploads a screenshot image for change-detected OCR processing."""
+    import tempfile
+    from pathlib import Path
+    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+        content = await file.read()
+        tmp.write(content)
+        tmp_path = Path(tmp.name)
+    try:
+        return screen_companion.process_screen_context(image_path=tmp_path)
+    finally:
+        if tmp_path.exists():
+            tmp_path.unlink()
+
+
+# ============================================================================
+# PHASE 3.5: MODEL INVENTORY, RESPONSIBILITY MATRIX & EVALUATION API
+# ============================================================================
+
+@app.get("/api/v1/models/inventory")
+async def get_models_inventory_endpoint() -> List[Dict[str, Any]]:
+    """Returns discovered model estate with licenses, RAM footprint, and operational status."""
+    return [m.model_dump() for m in model_inventory_manager.discover_model_estate()]
+
+
+@app.get("/api/v1/models/responsibilities")
+async def get_models_responsibilities_endpoint() -> List[Dict[str, Any]]:
+    """Returns task routing matrix with deterministic risk veto boundaries."""
+    return [r.model_dump() for r in model_inventory_manager.get_responsibility_matrix()]
+
+
+@app.post("/api/v1/models/evaluate")
+async def evaluate_models_endpoint() -> Dict[str, Any]:
+    """Runs repeatable benchmark evaluation suite across the model estate."""
+    return model_inventory_manager.run_live_evaluation_suite()
 
 
 # ============================================================================

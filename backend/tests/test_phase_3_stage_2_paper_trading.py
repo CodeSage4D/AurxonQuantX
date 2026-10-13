@@ -4,12 +4,16 @@ Kill Switch, Restart Recovery, Cash Conservation, and Data Provenance.
 """
 
 from pathlib import Path
+import json
+import sqlite3
 import tempfile
 import uuid
+from datetime import datetime, timezone
 import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.schemas.market import DataClassification, FreshnessStatus
 from app.schemas.paper_trading import (
     CancelOrderRequest,
     KillSwitchRequest,
@@ -18,6 +22,7 @@ from app.schemas.paper_trading import (
     PaperOrderSide,
     PaperOrderStatus,
     PaperOrderType,
+    RiskLimits,
 )
 from app.trading.costs import IndianTransactionCostModel, InstrumentType
 from app.trading.paper_manager import PaperPortfolioManager
@@ -402,3 +407,84 @@ def test_api_paper_trading_kill_switch_endpoint():
     resp2 = client.post("/api/v1/paper/kill-switch", json={"portfolio_id": "API_TEST_PORT", "active": False})
     assert resp2.status_code == 200
     assert resp2.json()["kill_switch_active"] is False
+
+
+def test_paper_trading_daily_loss_risk_veto(temp_paper_manager):
+    """Verify daily stop-loss limit halts new orders when cumulative daily loss threshold is crossed."""
+    manager = temp_paper_manager
+    manager.get_or_create_portfolio("LOSS_PORT", initial_cash=1000000.0)
+
+    # Configure strict daily stop-loss limit: ₹2,000
+    with sqlite3.connect(manager.db_path) as conn:
+        limits = RiskLimits(max_daily_loss_inr=2000.0, include_unrealized_in_daily_loss=True)
+        conn.execute(
+            "UPDATE paper_portfolios SET risk_limits_json = ? WHERE portfolio_id = ?",
+            (json.dumps(limits.model_dump()), "LOSS_PORT"),
+        )
+        # Seed an existing position with a heavy unrealized loss: 100 shares bought at ₹3000, current price ₹2500 -> ₹50,000 loss
+        now_iso = datetime.now(timezone.utc).isoformat()
+        conn.execute(
+            """
+            INSERT INTO paper_positions (portfolio_id, symbol, quantity, average_cost, current_price, realized_pnl, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("LOSS_PORT", "RELIANCE", 100, 3000.0, 2500.0, 0.0, now_iso),
+        )
+
+    # Now attempt a new order - should be vetoed by daily stop-loss
+    req = PaperOrderRequest(
+        portfolio_id="LOSS_PORT",
+        symbol="TCS",
+        side=PaperOrderSide.BUY,
+        quantity=5,
+    )
+    rej = manager.submit_order(req)
+    assert rej.status == PaperOrderStatus.REJECTED
+    assert "DAILY_STOP_LOSS_EXCEEDED" in rej.rejection_reason
+
+
+def test_paper_trading_max_drawdown_risk_veto(temp_paper_manager):
+    """Verify maximum portfolio drawdown circuit breaker restricts new buy orders."""
+    manager = temp_paper_manager
+    manager.get_or_create_portfolio("DD_PORT", initial_cash=1000000.0)
+
+    # Set peak equity to ₹10,00,000, current cash to ₹8,00,000 (20% drawdown) and max_drawdown_pct to 10%
+    with sqlite3.connect(manager.db_path) as conn:
+        limits = RiskLimits(max_drawdown_pct=10.0)
+        conn.execute(
+            "UPDATE paper_portfolios SET current_cash = 800000.0, peak_equity = 1000000.0, risk_limits_json = ? WHERE portfolio_id = ?",
+            (json.dumps(limits.model_dump()), "DD_PORT"),
+        )
+
+    req = PaperOrderRequest(
+        portfolio_id="DD_PORT",
+        symbol="RELIANCE",
+        side=PaperOrderSide.BUY,
+        quantity=10,
+    )
+    rej = manager.submit_order(req)
+    assert rej.status == PaperOrderStatus.REJECTED
+    assert "MAX_DRAWDOWN_EXCEEDED" in rej.rejection_reason
+
+
+def test_paper_trading_stale_market_data_veto(temp_paper_manager, monkeypatch):
+    """Verify market quotes with STALE_WARNING freshness status are rejected."""
+    manager = temp_paper_manager
+    manager.get_or_create_portfolio("STALE_PORT", initial_cash=1000000.0)
+
+    # Mock _resolve_market_price to return STALE_WARNING
+    def mock_resolve_stale(symbol):
+        return (2500.0, DataClassification.DELAYED_VERIFIED, FreshnessStatus.STALE_WARNING, "MOCK_STALE_FEED")
+
+    monkeypatch.setattr(manager, "_resolve_market_price", mock_resolve_stale)
+
+    req = PaperOrderRequest(
+        portfolio_id="STALE_PORT",
+        symbol="RELIANCE",
+        side=PaperOrderSide.BUY,
+        quantity=5,
+    )
+    rej = manager.submit_order(req)
+    assert rej.status == PaperOrderStatus.REJECTED
+    assert "STALE_MARKET_DATA" in rej.rejection_reason
+
