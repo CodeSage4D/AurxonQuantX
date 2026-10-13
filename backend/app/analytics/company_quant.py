@@ -42,10 +42,15 @@ class CompanyQuantEngine:
         latest_close = closes[-1]
 
         # 1. Period Returns
-        # ~21 bars for 1M, ~126 bars for 6M, ~252 bars for 1Y
+        # ~21 bars for 1M, ~126 bars for 6M, ~245-252 bars for 1Y (Indian exchange holidays reduce calendar year to ~245-250 sessions)
         ret_1m = ((latest_close / closes[-21]) - 1.0) * 100.0 if n >= 21 and closes[-21] > 0 else None
         ret_6m = ((latest_close / closes[-126]) - 1.0) * 100.0 if n >= 126 and closes[-126] > 0 else None
-        ret_1y = ((latest_close / closes[-252]) - 1.0) * 100.0 if n >= 252 and closes[-252] > 0 else None
+        if n >= 252 and closes[-252] > 0:
+            ret_1y = ((latest_close / closes[-252]) - 1.0) * 100.0
+        elif n >= 245 and closes[0] > 0:
+            ret_1y = ((latest_close / closes[0]) - 1.0) * 100.0
+        else:
+            ret_1y = None
 
         # 2. Moving Averages
         sma_20 = sum(closes[-20:]) / 20.0 if n >= 20 else None

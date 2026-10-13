@@ -30,7 +30,8 @@ KNOWN_INDIAN_SYMBOLS = {
 # Strict privacy redactor regexes for financial isolation
 CREDENTIAL_PATTERNS = [
     re.compile(r"\b(?:\d[ -]?){15,16}\b"),  # Credit/Debit card numbers (15-16 digits)
-    re.compile(r"\b\d{6}\b(?=.*(?:otp|one-time|verification|code))", re.IGNORECASE),  # 6-digit OTPs
+    re.compile(r"(?:otp|code|one-time|pin)\s*[:=]?\s*\b\d{4,8}\b", re.IGNORECASE),  # Prefix OTPs (e.g. OTP: 489201)
+    re.compile(r"\b\d{6}\b(?=.*(?:otp|one-time|verification|code))", re.IGNORECASE),  # Postfix 6-digit OTPs
     re.compile(r"(?:password|pin|secret|mpin|cvv)\s*[:=]\s*\S+", re.IGNORECASE),  # Passwords/MPINs/CVV
     re.compile(r"\b[A-Za-z0-9_-]{32,}\b"),  # API keys / Bearer tokens
 ]

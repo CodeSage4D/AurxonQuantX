@@ -166,9 +166,9 @@ export const App: React.FC = () => {
             <Activity size={20} color="#ffffff" />
           </div>
           <div>
-            <div className="brand-title">AURXON</div>
+            <div className="brand-title">Aurxon QuantX</div>
           </div>
-          <span className="brand-badge">PHASE 3.5 QUANT</span>
+          <span className="brand-badge">PHASE 4.2 LIVE</span>
         </div>
 
         {/* View Switcher Tabs */}

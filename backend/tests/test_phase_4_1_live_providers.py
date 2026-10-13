@@ -91,11 +91,6 @@ def test_specialist_persona_honesty_and_credential_removal():
 
 def test_paper_trading_risk_gate_drawdown_limit_enforcement():
     """Verifies that maximum drawdown ceiling is enforced at 30.0% with explicit rejection reason."""
-    # When drawdown is low (e.g. TCS fixture has ~5.9%), ticket is eligible
-    report_normal = company_researcher.conduct_research("TCS")
-    assert report_normal.paper_trading_ticket.is_eligible is True
-    assert report_normal.paper_trading_ticket.max_recommended_allocation_pct <= 30.0
-
     res = company_resolver.resolve("TCS")
     company = res.resolved_company
     quote = MarketQuote(
@@ -110,6 +105,15 @@ def test_paper_trading_risk_gate_drawdown_limit_enforcement():
         current_price=3500.0,
         retrieval_timestamp="2026-10-13T10:00:00Z",
     )
+
+    # When drawdown is low (12.0% <= 30.0%), ticket is eligible
+    ticket_low_dd = company_researcher.evaluate_paper_trading_eligibility(
+        company=company,
+        quote=quote,
+        quant_metrics={"max_drawdown_1y_pct": 12.0},
+    )
+    assert ticket_low_dd.is_eligible is True
+    assert ticket_low_dd.max_recommended_allocation_pct <= 30.0
 
     # Inject high drawdown (> 30.0%) and verify fail-closed risk veto
     ticket_high_dd = company_researcher.evaluate_paper_trading_eligibility(

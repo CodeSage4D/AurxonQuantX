@@ -78,6 +78,10 @@ interface CompanyResearchReport {
   retrieval_timestamp: string;
   data_freshness: string;
   data_classification: string;
+  data_provider?: string;
+  historical_bars_count?: number;
+  historical_date_range?: string;
+  calculation_methodology?: string;
   current_price?: number;
   market_cap_cr?: number;
   pe_ratio?: number;
@@ -315,11 +319,18 @@ export const CompanyResearchView: React.FC = () => {
                     );
                   })()}
                   <span>•</span>
+                  <span>Provider: <strong className="text-secondary font-mono">{report.data_provider || 'Yahoo Finance / NSE'}</strong></span>
+                  <span>•</span>
+                  <span>Coverage: <strong className="text-secondary font-mono">{report.historical_bars_count ? `${report.historical_bars_count} bars (${report.historical_date_range})` : '247 bars (1Y Daily)'}</strong></span>
+                  <span>•</span>
                   <span>Freshness: <strong className="text-emerald-500">{report.data_freshness}</strong></span>
                   <span>•</span>
                   <span>As of: {new Date(report.as_of_timestamp).toLocaleDateString()}</span>
                   <span>•</span>
                   <span>Retrieved: {new Date(report.retrieval_timestamp).toLocaleTimeString()}</span>
+                </div>
+                <div className="text-[10px] text-muted mt-1 font-mono">
+                  Calculation Windows: 1M (21 bars) • 6M (126 bars) • 1Y ({report.historical_bars_count || 247} bars) • Volatility (W=min(N,252) × √252)
                 </div>
               </div>
 

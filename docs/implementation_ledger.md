@@ -154,12 +154,25 @@
   - **Stage 8 Acceptance Tests:** 14 new automated tests across `test_phase_4_1_quantitative_audit.py` and `test_phase_4_1_live_providers.py`, including opt-in live network integration tests.
   - **Release Suite:** 153 passing automated backend tests in 2.51s (+ 1 opt-in live test passing in 2.02s); clean production frontend build in 2.35s.
 
+### Milestone: Phase 4.2 — Real-Data Research Pipeline & Company Intelligence
+- **Commit:** `HEAD` (Phase 4.2)
+- **Date:** 2026-10-13
+- **Delivered & Audited Capabilities:**
+  - **Stage 1 Baseline & Calendar Discrepancy Audit:** Resolved the discrepancy between 5-day exploratory health checks and 252-bar coverage claims by identifying the authentic 247-session Indian market annual trading calendar (`docs/phase_4_2_baseline.md`).
+  - **Stage 2 Historical Market Data Verification:** Empirically verified live retrieval of 247 daily OHLCV bars across `RELIANCE.NS`, `TCS.NS`, `INFY.NS`, `HDFCBANK.NS`, and `^NSEI` with zero duplicate dates, `Asia/Kolkata` timezone, and INR currency (`docs/phase_4_2_historical_data_validation.md`).
+  - **Stage 3 Provider & Licensing Governance:** Documented production-ready statutory feeds (AMFI, RBI) vs research connectors (yfinance) vs subscription-mandated exchange feeds (NSE/BSE WAF) (`docs/phase_4_2_provider_coverage.md`).
+  - **Stage 4 End-to-End Company Research:** Verified 9-stage company research pipeline with primary citations to exchange disclosures and IR portals (`docs/phase_4_2_end_to_end_research.md`).
+  - **Stage 5 Document & OCR Intelligence:** Verified financial table parsing, parenthetical accounting numbers, OTP/credential privacy redaction, and prompt-injection neutralization (`docs/phase_4_2_ocr_validation.md`).
+  - **Stage 6 Quantitative & Risk Review:** Implemented calendar-aware 1Y returns ($N \ge 245$), validated pure-Python analytics, and enforced 30% drawdown ceiling fail-closed gates (`docs/phase_4_2_quant_audit.md`).
+  - **Stage 7 User Experience & Transparency:** Added `data_provider`, `historical_bars_count`, `historical_date_range`, and calculation windows to research schemas and frontend UI; standardized product branding to **Aurxon QuantX** (`docs/phase_4_2_validation_report.md`).
+  - **Release Suite:** 160 passing automated backend tests in 2.40s (+ 2 opt-in live tests passing in 6.13s); clean production frontend build in 2.24s.
+
 ---
 
 ## 4. Test Matrix Summary
 
 ```
-======================== 153 passed, 1 skipped in 2.51s ========================
+======================== 160 passed, 2 skipped in 2.40s ========================
 - test_api_endpoints.py: 17 passed
 - test_audit_ledger.py: 9 passed
 - test_document_ingestion.py: 2 passed
@@ -177,8 +190,9 @@
 - test_phase_3_stage_1_backtesting.py: 21 passed
 - test_phase_3_stage_2_paper_trading.py: 11 passed
 - test_phase_4_company_research.py: 9 passed
-- test_phase_4_1_quantitative_audit.py: 8 passed (Independent math reference proofs)
-- test_phase_4_1_live_providers.py: 5 passed + 1 opt-in live test (Verified live AMFI/equity feeds)
+- test_phase_4_1_quantitative_audit.py: 8 passed
+- test_phase_4_1_live_providers.py: 5 passed + 1 opt-in live test
+- test_phase_4_2_real_data_pipeline.py: 7 passed + 1 opt-in live test (Verified live 5-security matrix)
 - test_screen_ocr.py: 5 passed
 - test_source_registry.py: 2 passed
 - test_valuation.py: 8 passed

@@ -136,6 +136,10 @@ class ComprehensiveCompanyResearchReport(BaseModel):
     retrieval_timestamp: str
     data_freshness: FreshnessStatus
     data_classification: DataClassification
+    data_provider: str = "AURXON_BENCHMARK_ARCHIVE"
+    historical_bars_count: Optional[int] = None
+    historical_date_range: Optional[str] = None
+    calculation_methodology: str = "Deterministic Pure-Python Analytics (No look-ahead bias)"
     
     # Financial snapshot
     current_price: Optional[float] = None

@@ -177,6 +177,12 @@ class CompanyResearcher:
             bm_bars = generate_benchmark_equity_bars("NIFTY50.NSE", start_price=22000.0, num_bars=70)
             self.store.insert_historical_bars(bm_bars)
             benchmark_bars = bm_bars
+        hist_count = len(bars) if bars else 0
+        hist_range = f"{bars[0].trading_date} to {bars[-1].trading_date}" if bars else "UNAVAILABLE"
+        data_provider_name = (
+            bars[0].source if bars and hasattr(bars[0], "source") and bars[0].source
+            else (quote.data_provider if quote else "AURXON_BENCHMARK_ARCHIVE")
+        )
 
         quant_metrics = company_quant_engine.calculate_price_and_trend_metrics(bars, benchmark_bars)
 
@@ -409,6 +415,9 @@ class CompanyResearcher:
             retrieval_timestamp=now_iso,
             data_freshness=quote.freshness,
             data_classification=quote.classification,
+            data_provider=data_provider_name,
+            historical_bars_count=hist_count,
+            historical_date_range=hist_range,
             current_price=quote.current_price,
             market_cap_cr=quote.pe_ratio * (quote.eps or 1.0) * (quote.shares_outstanding or 1.0) if quote.pe_ratio and quote.eps else None,
             pe_ratio=quote.pe_ratio,
