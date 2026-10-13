@@ -8,10 +8,27 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, HTTPException, Query, UploadFile, File
+from fastapi import FastAPI, HTTPException, Query, UploadFile, File, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
+
+from app.auth.schemas import (
+    User,
+    UserRegisterRequest,
+    UserLoginRequest,
+    TokenResponse,
+    UserRole,
+)
+from app.auth.security import create_access_token
+from app.auth.user_store import user_store
+from app.auth.dependencies import get_current_user, require_role
+from app.monitoring.operational_metrics import (
+    OperationalHardeningMiddleware,
+    metrics_tracker,
+    perform_system_readiness_audit,
+)
+from app.recovery.backup_service import backup_service
 
 from app.analytics.valuation import compute_deterministic_valuation_dossier
 from app.companion.screen_ocr import screen_companion
@@ -63,6 +80,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Configure Operational Hardening, Rate Limiting & Latency Tracking
+app.add_middleware(OperationalHardeningMiddleware)
+
 market_connector = NSEDataConnector()
 
 
@@ -78,6 +98,97 @@ async def health_check() -> Dict[str, Any]:
         "ocr_available": screen_companion.is_ocr_available(),
         "registered_models": model_registry.list_available_models(),
     }
+
+
+@app.get("/api/v1/health/ready")
+async def readiness_check() -> Dict[str, Any]:
+    """Examines system integrity, database connectivity, and deployment readiness."""
+    return perform_system_readiness_audit()
+
+
+@app.get("/api/v1/operational/metrics")
+async def operational_metrics_endpoint(
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Returns latency percentiles, error rates, provider failures, and operational resilience metrics."""
+    return metrics_tracker.get_summary()
+
+
+# ============================================================================
+# PHASE 5: AUTHENTICATION & ACCESS CONTROL ENDPOINTS
+# ============================================================================
+
+@app.post("/api/v1/auth/register", response_model=User, status_code=status.HTTP_201_CREATED)
+async def register_user_endpoint(req: UserRegisterRequest) -> User:
+    """Registers a new user in the persistent SQLite user directory."""
+    existing = user_store.get_user_by_email(req.email)
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"User with email '{req.email}' is already registered.",
+        )
+    return user_store.create_user(
+        email=req.email,
+        password=req.password,
+        role=req.role or UserRole.TRADER,
+        full_name=req.full_name,
+    )
+
+
+@app.post("/api/v1/auth/login", response_model=TokenResponse)
+async def login_user_endpoint(req: UserLoginRequest) -> TokenResponse:
+    """Authenticates credentials and issues signed HMAC-SHA256 Bearer access token."""
+    user = user_store.authenticate(req.email, req.password)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="INVALID CREDENTIALS: Incorrect email or password.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    access_token = create_access_token(
+        user=user,
+        expires_minutes=settings.AUTH_TOKEN_EXPIRE_MINUTES,
+    )
+    return TokenResponse(
+        access_token=access_token,
+        token_type="bearer",
+        expires_in_seconds=settings.AUTH_TOKEN_EXPIRE_MINUTES * 60,
+        user=user,
+    )
+
+
+@app.get("/api/v1/auth/me", response_model=User)
+async def get_authenticated_user_endpoint(
+    current_user: User = Depends(get_current_user),
+) -> User:
+    """Returns the authenticated user profile and assigned roles."""
+    return current_user
+
+
+@app.post("/api/v1/admin/backup/create")
+async def trigger_backup_endpoint(
+    current_user: User = Depends(require_role(UserRole.ADMIN)),
+) -> Dict[str, Any]:
+    """Creates an atomic, consistent online backup of all SQLite data stores."""
+    return backup_service.create_backup(label="admin_manual")
+
+
+@app.get("/api/v1/admin/backup/list")
+async def list_backups_endpoint(
+    current_user: User = Depends(require_role(UserRole.ADMIN)),
+) -> List[Dict[str, Any]]:
+    """Lists available backup archives with size, date, and checksum."""
+    return backup_service.list_backups()
+
+
+def check_portfolio_ownership(portfolio_id: str, current_user: User):
+    """Enforces server-side authorization and prevents IDOR cross-user data leakage."""
+    is_admin = (current_user.role == UserRole.ADMIN)
+    if not paper_manager.verify_portfolio_access(portfolio_id, current_user.user_id, is_admin=is_admin):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"FORBIDDEN: User {current_user.user_id} does not have access to portfolio '{portfolio_id}'. Cross-user access prohibited.",
+        )
 
 
 @app.get("/api/v1/market/quote/{ticker}")
@@ -558,20 +669,32 @@ async def evaluate_models_endpoint() -> Dict[str, Any]:
 # ============================================================================
 
 @app.get("/api/v1/paper/portfolio", response_model=PaperPortfolioState)
-async def get_paper_portfolio_endpoint(portfolio_id: str = "DEFAULT") -> PaperPortfolioState:
+async def get_paper_portfolio_endpoint(
+    portfolio_id: str = "DEFAULT",
+    current_user: User = Depends(get_current_user),
+) -> PaperPortfolioState:
     """Returns the persistent virtual cash, equity, open positions, and risk status of the paper portfolio."""
+    check_portfolio_ownership(portfolio_id, current_user)
     return paper_manager.get_portfolio_state(portfolio_id=portfolio_id)
 
 
 @app.post("/api/v1/paper/order", response_model=PaperOrderRecord)
-async def submit_paper_order_endpoint(req: PaperOrderRequest) -> PaperOrderRecord:
+async def submit_paper_order_endpoint(
+    req: PaperOrderRequest,
+    current_user: User = Depends(get_current_user),
+) -> PaperOrderRecord:
     """Submits and simulates execution of a paper order with statutory costs, risk vetoes, and duplicate protection."""
+    check_portfolio_ownership(req.portfolio_id, current_user)
     return paper_manager.submit_order(req)
 
 
 @app.post("/api/v1/paper/order/cancel", response_model=PaperOrderRecord)
-async def cancel_paper_order_endpoint(req: CancelOrderRequest) -> PaperOrderRecord:
+async def cancel_paper_order_endpoint(
+    req: CancelOrderRequest,
+    current_user: User = Depends(get_current_user),
+) -> PaperOrderRecord:
     """Cancels an open or submitted paper order if not yet filled."""
+    check_portfolio_ownership(req.portfolio_id, current_user)
     try:
         return paper_manager.cancel_order(req)
     except ValueError as e:
@@ -579,20 +702,33 @@ async def cancel_paper_order_endpoint(req: CancelOrderRequest) -> PaperOrderReco
 
 
 @app.get("/api/v1/paper/orders", response_model=List[PaperOrderRecord])
-async def list_paper_orders_endpoint(portfolio_id: str = "DEFAULT", limit: int = 50) -> List[PaperOrderRecord]:
+async def list_paper_orders_endpoint(
+    portfolio_id: str = "DEFAULT",
+    limit: int = 50,
+    current_user: User = Depends(get_current_user),
+) -> List[PaperOrderRecord]:
     """Lists recent paper orders and execution history."""
+    check_portfolio_ownership(portfolio_id, current_user)
     return paper_manager.list_orders(portfolio_id=portfolio_id, limit=limit)
 
 
 @app.post("/api/v1/paper/kill-switch", response_model=PaperPortfolioState)
-async def toggle_paper_kill_switch_endpoint(req: KillSwitchRequest) -> PaperPortfolioState:
+async def toggle_paper_kill_switch_endpoint(
+    req: KillSwitchRequest,
+    current_user: User = Depends(get_current_user),
+) -> PaperPortfolioState:
     """Engages or disengages the emergency risk kill switch to halt all simulated order placement."""
+    check_portfolio_ownership(req.portfolio_id, current_user)
     return paper_manager.toggle_kill_switch(req)
 
 
 @app.post("/api/v1/paper/corporate-action")
-async def apply_paper_corporate_action_endpoint(req: PaperCorporateActionRequest) -> Dict[str, Any]:
+async def apply_paper_corporate_action_endpoint(
+    req: PaperCorporateActionRequest,
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
     """Simulates a statutory corporate action (cash dividend, stock split, bonus) on open virtual positions."""
+    check_portfolio_ownership(req.portfolio_id, current_user)
     try:
         return paper_manager.apply_corporate_action(req)
     except ValueError as e:
@@ -600,8 +736,13 @@ async def apply_paper_corporate_action_endpoint(req: PaperCorporateActionRequest
 
 
 @app.post("/api/v1/paper/reset", response_model=PaperPortfolioState)
-async def reset_paper_portfolio_endpoint(portfolio_id: str = "DEFAULT", initial_cash: float = 1000000.0) -> PaperPortfolioState:
+async def reset_paper_portfolio_endpoint(
+    portfolio_id: str = "DEFAULT",
+    initial_cash: float = 1000000.0,
+    current_user: User = Depends(get_current_user),
+) -> PaperPortfolioState:
     """Resets the virtual paper portfolio to initial cash for testing/demo scenarios."""
+    check_portfolio_ownership(portfolio_id, current_user)
     return paper_manager.reset_portfolio(portfolio_id=portfolio_id, initial_cash=initial_cash)
 
 
@@ -622,24 +763,35 @@ class RebalanceSimulationRequest(BaseModel):
 
 
 @app.get("/api/v1/portfolio/list")
-async def list_portfolios_endpoint() -> List[Dict[str, Any]]:
-    """Returns all configured paper portfolios with active equity, cash, and drawdown."""
-    return paper_manager.list_portfolios()
+async def list_portfolios_endpoint(
+    current_user: User = Depends(get_current_user),
+) -> List[Dict[str, Any]]:
+    """Returns all configured paper portfolios for the authenticated user."""
+    is_admin = (current_user.role == UserRole.ADMIN)
+    return paper_manager.list_portfolios(user_id=current_user.user_id, is_admin=is_admin)
 
 
 @app.post("/api/v1/portfolio/create", response_model=PaperPortfolioState)
-async def create_portfolio_endpoint(req: CreatePortfolioRequest) -> PaperPortfolioState:
-    """Creates a new simulated paper portfolio with isolated ledger and cash balance."""
+async def create_portfolio_endpoint(
+    req: CreatePortfolioRequest,
+    current_user: User = Depends(get_current_user),
+) -> PaperPortfolioState:
+    """Creates a new simulated paper portfolio bound to the authenticated user."""
     return paper_manager.get_or_create_portfolio(
         portfolio_id=req.portfolio_id,
         name=req.name,
         initial_cash=req.initial_cash,
+        user_id=current_user.user_id,
     )
 
 
 @app.get("/api/v1/portfolio/intelligence", response_model=PortfolioIntelligenceSnapshot)
-async def get_portfolio_intelligence_endpoint(portfolio_id: str = "DEFAULT") -> PortfolioIntelligenceSnapshot:
+async def get_portfolio_intelligence_endpoint(
+    portfolio_id: str = "DEFAULT",
+    current_user: User = Depends(get_current_user),
+) -> PortfolioIntelligenceSnapshot:
     """Returns the unified portfolio intelligence package: holdings, concentration, performance, factor attribution, and stress tests."""
+    check_portfolio_ownership(portfolio_id, current_user)
     state = paper_manager.get_portfolio_state(portfolio_id=portfolio_id)
     holdings, concentration = portfolio_analytics_engine.build_holdings_inventory(state)
     snapshots = paper_manager.get_portfolio_snapshots(portfolio_id=portfolio_id, limit=30)
@@ -661,8 +813,12 @@ async def get_portfolio_intelligence_endpoint(portfolio_id: str = "DEFAULT") -> 
 
 
 @app.post("/api/v1/portfolio/rebalance/simulate", response_model=RebalancingSimulationResult)
-async def simulate_rebalance_endpoint(req: RebalanceSimulationRequest) -> RebalancingSimulationResult:
+async def simulate_rebalance_endpoint(
+    req: RebalanceSimulationRequest,
+    current_user: User = Depends(get_current_user),
+) -> RebalancingSimulationResult:
     """Simulates multi-asset rebalancing against user targets, enforcing constraints and statutory costs."""
+    check_portfolio_ownership(req.portfolio_id, current_user)
     state = paper_manager.get_portfolio_state(portfolio_id=req.portfolio_id)
     return paper_rebalancing_engine.simulate_rebalance(
         current_state=state,
@@ -672,15 +828,24 @@ async def simulate_rebalance_endpoint(req: RebalanceSimulationRequest) -> Rebala
 
 
 @app.post("/api/v1/portfolio/rebalance/execute-paper")
-async def execute_paper_rebalancing_endpoint(simulation: RebalancingSimulationResult) -> List[Dict[str, Any]]:
+async def execute_paper_rebalancing_endpoint(
+    simulation: RebalancingSimulationResult,
+    current_user: User = Depends(get_current_user),
+) -> List[Dict[str, Any]]:
     """Sequentially executes the simulated rebalancing trades in the paper ledger."""
+    check_portfolio_ownership(simulation.portfolio_id, current_user)
     paper_rebalancing_engine.paper_manager = paper_manager
     return paper_rebalancing_engine.execute_paper_rebalancing(simulation)
 
 
 @app.get("/api/v1/portfolio/snapshots")
-async def get_portfolio_snapshots_endpoint(portfolio_id: str = "DEFAULT", limit: int = 30) -> List[Dict[str, Any]]:
+async def get_portfolio_snapshots_endpoint(
+    portfolio_id: str = "DEFAULT",
+    limit: int = 30,
+    current_user: User = Depends(get_current_user),
+) -> List[Dict[str, Any]]:
     """Returns chronological snapshots of portfolio mark-to-market equity."""
+    check_portfolio_ownership(portfolio_id, current_user)
     return paper_manager.get_portfolio_snapshots(portfolio_id=portfolio_id, limit=limit)
 
 

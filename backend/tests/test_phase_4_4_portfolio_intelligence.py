@@ -30,7 +30,10 @@ from app.analytics.factor_attribution import FactorAttributionEngine
 from app.trading.rebalancing import PaperRebalancingEngine
 from app.trading.stress_testing import PortfolioStressTestingEngine
 
+from app.auth.security import create_access_token
+
 client = TestClient(app)
+client.headers["Authorization"] = f"Bearer {create_access_token('USR_SYSTEM', role='ADMIN')}"
 
 
 @pytest.fixture

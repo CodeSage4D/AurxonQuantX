@@ -127,6 +127,7 @@ class PaperPositionRecord(BaseModel):
 class PaperPortfolioState(BaseModel):
     """Complete snapshot of a persistent paper trading portfolio."""
     portfolio_id: str
+    user_id: Optional[str] = "USR_SYSTEM"
     name: str
     initial_cash: float
     current_cash: float

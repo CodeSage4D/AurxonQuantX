@@ -88,6 +88,11 @@ class PaperPortfolioManager:
                 conn.execute("ALTER TABLE paper_portfolios ADD COLUMN peak_equity REAL NOT NULL DEFAULT 0.0")
             except Exception:
                 pass
+            try:
+                conn.execute("ALTER TABLE paper_portfolios ADD COLUMN user_id TEXT DEFAULT 'USR_SYSTEM'")
+            except Exception:
+                pass
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_portfolios_user ON paper_portfolios(user_id)")
 
             conn.execute(
                 """
@@ -190,9 +195,13 @@ class PaperPortfolioManager:
             conn.commit()
 
     def get_or_create_portfolio(
-        self, portfolio_id: str = "DEFAULT", initial_cash: float = 1000000.0, name: str = "Primary Paper Portfolio"
+        self,
+        portfolio_id: str = "DEFAULT",
+        initial_cash: float = 1000000.0,
+        name: str = "Primary Paper Portfolio",
+        user_id: str = "USR_SYSTEM",
     ) -> PaperPortfolioState:
-        """Retrieves an existing portfolio from SQLite or creates a new one with initial virtual cash."""
+        """Retrieves an existing portfolio from SQLite or creates a new one with initial virtual cash and user ownership."""
         now_iso = datetime.now(timezone.utc).isoformat()
         with sqlite3.connect(self.db_path, timeout=10.0) as conn:
             cursor = conn.cursor()
@@ -203,12 +212,13 @@ class PaperPortfolioManager:
                 cursor.execute(
                     """
                     INSERT INTO paper_portfolios (
-                        portfolio_id, name, initial_cash, current_cash, peak_equity, kill_switch_active,
+                        portfolio_id, user_id, name, initial_cash, current_cash, peak_equity, kill_switch_active,
                         risk_limits_json, created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         portfolio_id,
+                        user_id or "USR_SYSTEM",
                         name,
                         initial_cash,
                         initial_cash,
@@ -224,7 +234,7 @@ class PaperPortfolioManager:
                     conn,
                     portfolio_id=portfolio_id,
                     event_type=PaperEventType.PORTFOLIO_CREATED,
-                    payload={"initial_cash": initial_cash, "name": name},
+                    payload={"initial_cash": initial_cash, "name": name, "user_id": user_id or "USR_SYSTEM"},
                 )
         return self.get_portfolio_state(portfolio_id)
 
@@ -236,7 +246,7 @@ class PaperPortfolioManager:
             cursor.execute(
                 """
                 SELECT portfolio_id, name, initial_cash, current_cash, peak_equity, kill_switch_active,
-                       risk_limits_json, created_at, updated_at
+                       risk_limits_json, created_at, updated_at, user_id
                 FROM paper_portfolios WHERE portfolio_id = ?
                 """,
                 (portfolio_id,),
@@ -245,7 +255,7 @@ class PaperPortfolioManager:
             if not port_row:
                 return self.get_or_create_portfolio(portfolio_id)
 
-            p_id, name, init_cash, curr_cash, stored_peak_eq, kill_switch, limits_json, created_at, updated_at = port_row
+            p_id, name, init_cash, curr_cash, stored_peak_eq, kill_switch, limits_json, created_at, updated_at, owner_user_id = port_row
             risk_limits = RiskLimits(**json.loads(limits_json))
             risk_limits.kill_switch_active = bool(kill_switch)
 
@@ -328,6 +338,7 @@ class PaperPortfolioManager:
 
             return PaperPortfolioState(
                 portfolio_id=p_id,
+                user_id=owner_user_id or "USR_SYSTEM",
                 name=name,
                 initial_cash=round(init_cash, 2),
                 current_cash=round(curr_cash, 2),
@@ -1000,24 +1011,35 @@ class PaperPortfolioManager:
             order_ids = [r[0] for r in cursor.fetchall()]
             return [self._get_order_by_id(conn, o_id) for o_id in order_ids]
 
-    def list_portfolios(self) -> List[Dict[str, Any]]:
-        """Returns all configured paper portfolios with active status."""
+    def list_portfolios(self, user_id: Optional[str] = None, is_admin: bool = False) -> List[Dict[str, Any]]:
+        """Returns configured paper portfolios, filtered by user_id unless is_admin is True."""
         with sqlite3.connect(self.db_path, timeout=10.0) as conn:
             cursor = conn.cursor()
-            cursor.execute(
-                """
-                SELECT portfolio_id, name, initial_cash, current_cash, peak_equity,
-                       kill_switch_active, created_at, updated_at
-                FROM paper_portfolios ORDER BY created_at ASC
-                """
-            )
+            if user_id and not is_admin and user_id != "USR_SYSTEM":
+                cursor.execute(
+                    """
+                    SELECT portfolio_id, name, initial_cash, current_cash, peak_equity,
+                           kill_switch_active, created_at, updated_at, user_id
+                    FROM paper_portfolios WHERE user_id = ? ORDER BY created_at ASC
+                    """,
+                    (user_id,),
+                )
+            else:
+                cursor.execute(
+                    """
+                    SELECT portfolio_id, name, initial_cash, current_cash, peak_equity,
+                           kill_switch_active, created_at, updated_at, user_id
+                    FROM paper_portfolios ORDER BY created_at ASC
+                    """
+                )
             rows = cursor.fetchall()
             result = []
             for r in rows:
-                p_id, name, init_cash, curr_cash, peak_eq, kill_sw, cr_at, up_at = r
+                p_id, name, init_cash, curr_cash, peak_eq, kill_sw, cr_at, up_at, p_owner = r
                 state = self.get_portfolio_state(p_id)
                 result.append({
                     "portfolio_id": p_id,
+                    "user_id": p_owner or "USR_SYSTEM",
                     "name": name,
                     "initial_cash": init_cash,
                     "current_cash": curr_cash,
@@ -1031,6 +1053,35 @@ class PaperPortfolioManager:
                     "updated_at": up_at,
                 })
             return result
+
+    def verify_portfolio_access(
+        self,
+        portfolio_id: str,
+        user_id: str,
+        is_admin: bool = False,
+    ) -> bool:
+        """Verifies if the given user owns the portfolio or has administrative privileges.
+        Returns True if access is permitted, False otherwise."""
+        if is_admin or user_id == "USR_SYSTEM":
+            return True
+        with sqlite3.connect(self.db_path, timeout=10.0) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT user_id FROM paper_portfolios WHERE portfolio_id = ?", (portfolio_id,))
+            row = cursor.fetchone()
+            if not row:
+                return True
+            owner = row[0] or "USR_SYSTEM"
+            if owner == "USR_SYSTEM":
+                return True
+            return owner == user_id
+
+    def get_portfolio_owner(self, portfolio_id: str) -> Optional[str]:
+        """Returns the user_id that owns the portfolio, or None if not found."""
+        with sqlite3.connect(self.db_path, timeout=10.0) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT user_id FROM paper_portfolios WHERE portfolio_id = ?", (portfolio_id,))
+            row = cursor.fetchone()
+            return (row[0] or "USR_SYSTEM") if row else None
 
     def record_portfolio_snapshot(self, portfolio_id: str = "DEFAULT") -> Dict[str, Any]:
         """Durably persists a mark-to-market snapshot of the portfolio."""

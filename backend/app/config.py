@@ -42,6 +42,17 @@ class Settings(BaseSettings):
     MAX_POSITION_SIZE_PERCENT: float = Field(default=10.0, description="Max capital in single position")
     MAX_DRAWDOWN_LIMIT_PERCENT: float = Field(default=15.0, description="Max portfolio drawdown before circuit breaker")
 
+    # Phase 5: Authentication & Operational Hardening
+    AUTH_SECRET_KEY: str = Field(
+        default="aurxon-quantx-dev-secret-key-32bytes-secure-production-ready",
+        description="HMAC secret key for signing user authentication tokens",
+    )
+    AUTH_TOKEN_EXPIRE_MINUTES: int = Field(default=1440, description="Token validity in minutes (24h)")
+    AUTH_ENABLED: bool = Field(default=True, description="Enforce server-side user authentication on protected endpoints")
+    RATE_LIMIT_PER_MINUTE: int = Field(default=120, description="Rate limit requests per client IP")
+    MAX_REQUEST_SIZE_BYTES: int = Field(default=10485760, description="10MB max request size limit")
+    BACKUP_STORAGE_PATH: str = Field(default="data/backups", description="Local backup archive directory")
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

@@ -27,7 +27,10 @@ from app.schemas.paper_trading import (
 from app.trading.costs import IndianTransactionCostModel, InstrumentType
 from app.trading.paper_manager import PaperPortfolioManager
 
+from app.auth.security import create_access_token
+
 client = TestClient(app)
+client.headers["Authorization"] = f"Bearer {create_access_token('USR_SYSTEM', role='ADMIN')}"
 
 
 @pytest.fixture
