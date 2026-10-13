@@ -89,7 +89,7 @@
   - **Release Suite:** 80 passing automated backend tests in 1.63s; clean production frontend build in 2.37s.
 
 ### Milestone: Phase 3, Stage 1 — Deterministic Backtesting Engine
-- **Commit:** `[Current Phase 3 Stage 1 Commit]`
+- **Commit:** `f09facb`
 - **Date:** 2026-10-13
 - **Delivered Capabilities:**
   - **Historical Market Data Contract (`HistoricalSeriesContract`):** Strongly-typed OHLCV data validation preventing low > high anomalies, timestamp sequencing errors, missing bars, and ambiguous adjustments. Explicit classification of real vs benchmark fixture vs synthetic data.
