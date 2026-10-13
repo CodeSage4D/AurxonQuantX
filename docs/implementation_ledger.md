@@ -88,25 +88,25 @@
   - **Frontend Transparency (Workstream H):** Added statutory filing lineage inspector, recommendation readiness gate cards, and typed null-safe valuation displays in React interface.
   - **Release Suite:** 80 passing automated backend tests in 1.63s; clean production frontend build in 2.37s.
 
-### Milestone: Phase 3, Stage 1 — Deterministic Backtesting Engine
-- **Commit:** `f09facb`
+### Milestone: Phase 3, Stage 1 — Deterministic Backtesting Engine & Independent Code Audit
+- **Commit:** `[Current Phase 3 Stage 1 Audit Commit]`
 - **Date:** 2026-10-13
-- **Delivered Capabilities:**
-  - **Historical Market Data Contract (`HistoricalSeriesContract`):** Strongly-typed OHLCV data validation preventing low > high anomalies, timestamp sequencing errors, missing bars, and ambiguous adjustments. Explicit classification of real vs benchmark fixture vs synthetic data.
-  - **Deterministic Event-Driven Engine (`DeterministicBacktestEngine`):** Strictly enforces next-bar execution (orders generated on bar $T$ Close execute at bar $T+1$ Open). Bit-exact deterministic replay verified across 10 identical runs. Lookahead leakage structurally blocked.
-  - **Indian Statutory Transaction Cost Model (`IndianTransactionCostModel`):** Accurate statutory rate calculation: STT (0.1% buy/sell delivery), Stamp Duty (0.015% buy only), NSE transaction charges (0.00297%), SEBI turnover fees (₹10/Cr), GST (18% on fees), and configurable slippage.
-  - **Corporate Actions Engine:** Cash dividends credited to balance without phantom adjustments; stock splits and bonus distributions scale share counts and inversely scale average cost without double-adjusting price feeds.
-  - **Quantitative Performance & Risk Metrics (`calculate_backtest_metrics`):** Gross vs Net returns, CAGR, Maximum Drawdown, Sharpe & Sortino ratios (calibrated to Indian risk-free rate $R_f = 6.5\%$). Null-safe edge case handling for zero volatility and zero trades.
-  - **Audit Ledger Chaining:** Automated recording of every backtest run (parameter hash, dataset hash, performance metrics) into SQLite WAL `audit_chain` using sequential SHA-256 tamper-evident hashing.
-  - **REST API Endpoints:** Strategy catalogue, fixture catalogue, and simulation execution endpoints added to FastAPI surface (`/api/v1/backtest/*`).
-  - **Release Suite:** 96 passing automated backend tests in 1.62s; clean production frontend build in 2.06s.
+- **Delivered & Audited Capabilities:**
+  - **Historical Market Data Contract (`HistoricalSeriesContract`):** Strongly-typed OHLCV data validation preventing low > high anomalies, timestamp sequencing errors, missing bars, and ambiguous adjustments. Explicit classification of real vs benchmark fixture (`SYNTHETIC_BENCHMARK`) vs synthetic data. Timezone ISO verification enforced.
+  - **Deterministic Event-Driven Engine (`DeterministicBacktestEngine`):** Strictly enforces next-bar execution (orders generated on bar $T$ Close execute at bar $T+1$ Open). Corporate actions on Ex-Date are applied to overnight positions *prior* to executing new market-open fills at ex-prices, preventing ex-date buyers from erroneously receiving dividends or bonus issues. Pre-adjusted data guard prevents double counting.
+  - **Indian Statutory Transaction Cost Model (`IndianTransactionCostModel`):** Versioned schedule `2024.2-STATUTORY` (effective `2024-10-01`). Covers delivery equity (STT 0.1% buy/sell, stamp 0.015% buy), intraday equity (STT 0.025% sell, stamp 0.003% buy), equity ETFs (STT 0% buy, 0.001% sell, stamp 0.005% buy), NSE transaction charges (0.00297%), SEBI turnover fees (₹10/Cr), GST (18%), and configurable slippage. Unsupported commodity/currency instruments explicitly rejected.
+  - **Corporate Actions Engine:** Cash dividends credited to balance without phantom adjustments; stock splits and bonus distributions scale share counts via typed `get_multiplier()` ($2.0\times$ for statutory 1:1 bonus) and inversely scale average cost without double-adjusting price feeds.
+  - **Quantitative Performance & Risk Metrics (`calculate_backtest_metrics`):** Gross vs Net returns, CAGR, Maximum Drawdown, Sharpe & Sortino ratios (calibrated to Indian risk-free rate $R_f = 6.5\%$). Geometric compounding for benchmark returns. Diagnostic caveats for zero volatility and zero closed trades.
+  - **Audit Ledger Chaining & Failure Logging:** Automated recording of completed backtest runs into SQLite WAL `audit_chain` using sequential SHA-256 tamper-evident hashing. Added `record_backtest_failure` for explicit `EXECUTION_FAILED` audit logging without breaking chain integrity.
+  - **REST API Endpoints:** Strategy catalogue, fixture catalogue with explicit demonstration labels, and simulation execution endpoint (`/api/v1/backtest/*`). Rejects uncurated equity requests with HTTP 404 to eliminate silent data substitution.
+  - **Release Suite:** 107 passing automated backend tests in 1.74s; clean production frontend build in 2.02s.
 
 ---
 
 ## 4. Test Matrix Summary
 
 ```
-======================== 96 passed, 1 warning in 1.62s =========================
+======================== 107 passed, 1 warning in 1.74s ========================
 - test_api_endpoints.py: 11 passed (Health, Quote, Sync, Audit Records, Integrity, Companion, Sources, IPO, Funds, Export, Ingestion Upload)
 - test_audit_ledger.py: 2 passed (Sequential Hash-Chaining, Tampering Detection)
 - test_document_ingestion.py: 2 passed (Text/HTML Ingestion with Prompt Injection, Empty/Corrupt PDF Handling)
@@ -119,7 +119,7 @@
 - test_phase_2_1_fund_math.py: 5 passed (CAGR Reference, Direct Savings, Tracking Error Tolerance, Overlap Math, Benchmark Alignment)
 - test_phase_2_1_ipo_math.py: 5 passed (Issue Structure & Dilution, Promoter Bounds, CAGR Limits, Negative EPS, Bajaj Cross-Check)
 - test_phase_2_2_semantics_and_connectors.py: 14 passed (Negative/Zero/Missing EPS, CAGR Semantics, AMFI Parser & Lookup, IPO Lineage, Readiness Gates, Endpoints)
-- test_phase_3_stage_1_backtesting.py: 16 passed (Data Contract Validation, Next-Bar Execution, Statutory Costs, Corporate Actions, Deterministic Replay, Ledger Chaining, REST API)
+- test_phase_3_stage_1_backtesting.py: 27 passed (Data Contract Validation, Next-Bar Execution, Statutory Costs, Corporate Actions, Deterministic Replay, Ledger Chaining, REST API, ETF Rates, Intraday Rates, Ex-Dividend Ordering, Timezone Offsets, Zero Volatility, HTTP 404)
 - test_screen_ocr.py: 3 passed (Symbol Detection, Privacy Redaction, Pause Control)
 - test_source_registry.py: 2 passed (Default Sources Registered, Custom Source Registration)
 - test_valuation.py: 8 passed (Graham, DCF, Sensitivity Matrix, Bank Exclusion, Piotroski, Altman Z, Risk Metrics, Dossier)

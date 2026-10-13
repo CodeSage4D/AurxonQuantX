@@ -52,11 +52,39 @@ class CorporateAction(BaseModel):
     ratio_denominator: Optional[float] = Field(
         default=None, description="e.g., 1 for 2:1 bonus or 1 for 10:1 split"
     )
+    total_share_multiplier: Optional[float] = Field(
+        default=None, description="Explicit post-action multiplier (e.g. 2.0 for 1:1 bonus, 10.0 for 10:1 split)"
+    )
     dividend_amount_inr: Optional[float] = Field(
         default=None, description="Cash dividend in INR per share"
     )
     description: str
     source_filing: Optional[str] = None
+
+    def get_multiplier(self) -> float:
+        """Computes unambiguous share multiplier for split or bonus issue."""
+        if self.total_share_multiplier is not None and self.total_share_multiplier > 0:
+            return float(self.total_share_multiplier)
+
+        num = self.ratio_numerator or 1.0
+        den = self.ratio_denominator or 1.0
+        if den <= 0:
+            return 1.0
+
+        if self.action_type == CorporateActionType.STOCK_SPLIT:
+            return num / den
+
+        if self.action_type == CorporateActionType.BONUS_ISSUE:
+            # If specified as 1:1 statutory (1 bonus share for 1 held), multiplier is 2.0
+            if num == 1.0 and den == 1.0:
+                return 2.0
+            # If already provided as post-action ratio 2:1 (doubling)
+            if num == 2.0 and den == 1.0 and ("doubling" in self.description.lower() or "1:1" in self.description.lower()):
+                return 2.0
+            # General statutory formula: (D + N) / D
+            return (den + num) / den
+
+        return 1.0
 
 
 class HistoricalBar(BaseModel):
@@ -170,6 +198,14 @@ def validate_historical_series(
         # 4. Volume check
         if b.volume < 0:
             inconsistency_dates.append(f"{b.trading_date}: Negative volume ({b.volume})")
+
+        # 5. Timestamp and Timezone verification
+        try:
+            parsed_dt = datetime.fromisoformat(b.timestamp_iso)
+            if parsed_dt.tzinfo is None:
+                inconsistency_dates.append(f"{b.trading_date}: Missing timezone in timestamp '{b.timestamp_iso}'")
+        except Exception as e:
+            inconsistency_dates.append(f"{b.trading_date}: Malformed ISO timestamp '{b.timestamp_iso}' ({e})")
 
     if not is_chronological:
         rejection_reasons.append("Historical series is not strictly chronological")

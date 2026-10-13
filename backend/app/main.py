@@ -334,21 +334,53 @@ async def list_backtest_strategies():
 async def list_backtest_fixtures():
     """Lists validated historical OHLCV bar fixtures available for deterministic replay."""
     return [
-        {"symbol": "RELIANCE", "bars_count": len(RELIANCE_SERIES), "corporate_actions": "Interim Dividend ₹10", "classification": "HISTORICAL_VERIFIED"},
-        {"symbol": "TCS", "bars_count": len(TCS_BONUS_SERIES), "corporate_actions": "1:1 Bonus Issue", "classification": "HISTORICAL_VERIFIED"},
-        {"symbol": "NIFTY50_INDEX", "bars_count": len(NIFTY50_BENCHMARK_SERIES), "corporate_actions": "None (Benchmark Index)", "classification": "HISTORICAL_VERIFIED"},
+        {
+            "symbol": "RELIANCE",
+            "bars_count": len(RELIANCE_SERIES),
+            "corporate_actions": "Interim Dividend ₹10",
+            "classification": "SYNTHETIC_BENCHMARK",
+            "is_demonstration": True,
+            "caveat": "Curated benchmark fixture. Not a live exchange feed.",
+        },
+        {
+            "symbol": "TCS",
+            "bars_count": len(TCS_BONUS_SERIES),
+            "corporate_actions": "1:1 Bonus Issue",
+            "classification": "SYNTHETIC_BENCHMARK",
+            "is_demonstration": True,
+            "caveat": "Curated benchmark fixture. Not a live exchange feed.",
+        },
+        {
+            "symbol": "NIFTY50_INDEX",
+            "bars_count": len(NIFTY50_BENCHMARK_SERIES),
+            "corporate_actions": "None (Benchmark Index)",
+            "classification": "SYNTHETIC_BENCHMARK",
+            "is_demonstration": True,
+            "caveat": "Curated benchmark fixture. Not a live exchange feed.",
+        },
     ]
 
 
 @app.post("/api/v1/backtest/run", response_model=BacktestExecutionResult)
 async def run_backtest_endpoint(req: BacktestRunRequest) -> BacktestExecutionResult:
     """Executes deterministic, event-driven backtest with statutory Indian transaction costs."""
-    # Match historical series fixture
+    # Match historical series fixture explicitly; never substitute silently
     clean_sym = req.symbol.strip().upper()
-    if "TCS" in clean_sym:
+    if clean_sym in ["TCS", "TCS.NS"]:
         bars = TCS_BONUS_SERIES
-    else:
+    elif clean_sym in ["RELIANCE", "RIL", "RELIANCE.NS"]:
         bars = RELIANCE_SERIES
+    elif clean_sym in ["NIFTY", "NIFTY50", "NIFTY_50", "NIFTY50_INDEX"]:
+        bars = NIFTY50_BENCHMARK_SERIES
+    else:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                f"Historical equity data for '{req.symbol}' is unavailable. "
+                "Empirical backtesting on uncurated Indian equities is BLOCKED until licensed exchange feeds (Bhavcopy/Tick) are integrated. "
+                "Supported demonstration benchmark fixtures: RELIANCE, TCS, NIFTY50_INDEX."
+            ),
+        )
 
     # Configure Strategy
     strat_id = req.strategy.strip()

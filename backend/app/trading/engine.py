@@ -15,6 +15,7 @@ import uuid
 from pydantic import BaseModel, Field
 
 from app.schemas.historical_data import (
+    AdjustmentMethod,
     CorporateAction,
     CorporateActionType,
     HistoricalBar,
@@ -211,6 +212,12 @@ class BacktestExecutionResult(BaseModel):
     equity_curve: List[EquityPoint]
     rejections: List[Dict[str, Any]]
     data_classification: DataClassification
+    is_demonstration: bool = True
+    data_provenance_caveat: str = (
+        "DEMONSTRATION SIMULATION: Evaluated on curated benchmark fixtures. "
+        "Empirical uncurated equity backtesting is BLOCKED until licensed exchange feeds are connected."
+    )
+    run_status: str = "COMPLETED"
     audit_chain_hash: str
     created_at: str
 
@@ -259,7 +266,30 @@ class DeterministicBacktestEngine:
 
         for i, bar in enumerate(bars):
             # -------------------------------------------------------------
-            # STEP 1: EXECUTE PENDING ORDERS ON BAR OPEN (T+1 EXECUTION)
+            # STEP 1: APPLY STATUTORY CORPORATE ACTIONS ON EX-DATE
+            # (Applied strictly to overnight holdings from Bar T-1 prior to market open)
+            # -------------------------------------------------------------
+            if bar.corporate_actions and bar.adjustment_method == AdjustmentMethod.RAW_UNADJUSTED:
+                pos = portfolio.get_position(symbol)
+                for ca in bar.corporate_actions:
+                    if ca.action_type in [CorporateActionType.STOCK_SPLIT, CorporateActionType.BONUS_ISSUE]:
+                        ratio = ca.get_multiplier()
+                        if ratio > 0 and pos.quantity > 0:
+                            pos.quantity = int(pos.quantity * ratio)
+                            pos.average_cost = round(pos.average_cost / ratio, 4)
+                            # Adjust open lot tracking
+                            for lot in open_lots:
+                                lot["quantity"] = int(lot["quantity"] * ratio)
+                                lot["price"] = round(lot["price"] / ratio, 4)
+
+                    elif ca.action_type == CorporateActionType.CASH_DIVIDEND:
+                        if ca.dividend_amount_inr and ca.dividend_amount_inr > 0 and pos.quantity > 0:
+                            dividend_cash = round(pos.quantity * ca.dividend_amount_inr, 2)
+                            portfolio.cash += dividend_cash
+
+            # -------------------------------------------------------------
+            # STEP 2: EXECUTE PENDING ORDERS ON BAR OPEN (T+1 EXECUTION)
+            # (Executed at post-action ex-price at market open)
             # -------------------------------------------------------------
             if pending_orders:
                 orders_to_process = pending_orders
@@ -392,29 +422,6 @@ class DeterministicBacktestEngine:
                         )
 
             # -------------------------------------------------------------
-            # STEP 2: APPLY STATUTORY CORPORATE ACTIONS ON EX-DATE
-            # -------------------------------------------------------------
-            if bar.corporate_actions:
-                pos = portfolio.get_position(symbol)
-                for ca in bar.corporate_actions:
-                    if ca.action_type in [CorporateActionType.STOCK_SPLIT, CorporateActionType.BONUS_ISSUE]:
-                        if ca.ratio_numerator and ca.ratio_denominator and ca.ratio_denominator > 0:
-                            ratio = ca.ratio_numerator / ca.ratio_denominator
-                            if pos.quantity > 0:
-                                old_q = pos.quantity
-                                pos.quantity = int(pos.quantity * ratio)
-                                pos.average_cost = round(pos.average_cost / ratio, 4)
-                                # Adjust open lot tracking
-                                for lot in open_lots:
-                                    lot["quantity"] = int(lot["quantity"] * ratio)
-                                    lot["price"] = round(lot["price"] / ratio, 4)
-
-                    elif ca.action_type == CorporateActionType.CASH_DIVIDEND:
-                        if ca.dividend_amount_inr and ca.dividend_amount_inr > 0 and pos.quantity > 0:
-                            dividend_cash = round(pos.quantity * ca.dividend_amount_inr, 2)
-                            portfolio.cash += dividend_cash
-
-            # -------------------------------------------------------------
             # STEP 3: MARK-TO-MARKET PORTFOLIO AT BAR CLOSE
             # -------------------------------------------------------------
             pos = portfolio.get_position(symbol)
@@ -516,6 +523,12 @@ class DeterministicBacktestEngine:
             equity_curve=equity_curve,
             rejections=rejections,
             data_classification=quality_report.data_classification,
+            is_demonstration=True,
+            data_provenance_caveat=(
+                "DEMONSTRATION SIMULATION: Evaluated on curated benchmark fixtures. "
+                "Empirical uncurated equity backtesting is BLOCKED until licensed exchange feeds are connected."
+            ),
+            run_status="COMPLETED",
             audit_chain_hash=chain_hash,
             created_at=datetime.now(timezone.utc).isoformat(),
         )

@@ -64,14 +64,15 @@ def generate_benchmark_equity_bars(
                 )
             )
 
-        # Day 50: 1:1 Bonus / 2:1 Split
+        # Day 50: 1:1 Bonus Issue (Doubling of share count)
         if include_split and i == 50:
             corporate_actions.append(
                 CorporateAction(
                     action_type=CorporateActionType.BONUS_ISSUE,
                     ex_date=date_str,
-                    ratio_numerator=2.0,
+                    ratio_numerator=1.0,
                     ratio_denominator=1.0,
+                    total_share_multiplier=2.0,
                     description=f"{symbol} 1:1 Bonus Issue",
                     source_filing="BSE/NSE Corporate Announcement",
                 )
@@ -91,8 +92,8 @@ def generate_benchmark_equity_bars(
                 turnover_crores=round((bar_close * volume) / 10000000.0, 2),
                 vwap=round((bar_high + bar_low + bar_close) / 3.0, 2),
                 corporate_actions=corporate_actions,
-                source="NSE_BHAVCOPY_FIXTURE",
-                data_classification=DataClassification.HISTORICAL_VERIFIED,
+                source="NSE_BHAVCOPY_BENCHMARK_FIXTURE",
+                data_classification=DataClassification.SYNTHETIC_BENCHMARK,
             )
         )
 

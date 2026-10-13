@@ -134,10 +134,11 @@ def calculate_backtest_metrics(
             sharpe = round((excess_daily_mean / daily_vol) * math.sqrt(252), 2)
 
         # Downside Deviation & Sortino Ratio
-        downside_sq = [min(0.0, r - rf_daily) ** 2 for r in daily_returns]
-        downside_dev = math.sqrt(sum(downside_sq) / max(1, len(daily_returns)))
-        if downside_dev > 1e-8:
-            sortino = round((excess_daily_mean / downside_dev) * math.sqrt(252), 2)
+        if daily_vol > 1e-8:
+            downside_sq = [min(0.0, r - rf_daily) ** 2 for r in daily_returns]
+            downside_dev = math.sqrt(sum(downside_sq) / max(1, len(daily_returns)))
+            if downside_dev > 1e-8:
+                sortino = round((excess_daily_mean / downside_dev) * math.sqrt(252), 2)
 
     # 4. Maximum Drawdown & Duration
     peak_equity = initial_capital
@@ -201,8 +202,12 @@ def calculate_backtest_metrics(
             b_val = cov / var_bm
             beta = round(b_val, 2)
             if cagr_net is not None:
-                bm_cagr = round(((1.0 + sum(benchmark_returns)) ** (252.0 / len(benchmark_returns)) - 1.0) * 100.0, 2)
-                alpha = round(cagr_net - (risk_free_rate_pct + b_val * (bm_cagr - risk_free_rate_pct)), 2)
+                bm_compounded = 1.0
+                for r in benchmark_returns:
+                    bm_compounded *= (1.0 + r)
+                if bm_compounded > 0 and len(benchmark_returns) > 0:
+                    bm_cagr = round(((bm_compounded) ** (252.0 / len(benchmark_returns)) - 1.0) * 100.0, 2)
+                    alpha = round(cagr_net - (risk_free_rate_pct + b_val * (bm_cagr - risk_free_rate_pct)), 2)
 
     caveats = [
         "Simulation strictly uses lagged next-bar execution (Bar T+1 Open) to eliminate lookahead leakage.",
@@ -210,6 +215,20 @@ def calculate_backtest_metrics(
         f"Sharpe and Sortino ratios assume Indian Risk-Free Rate of {risk_free_rate_pct}% p.a. (91-day T-bill reference).",
         "Historical backtested results are non-predictive simulations and do not guarantee future returns.",
     ]
+
+    # Handle undefined metrics and edge cases explicitly
+    if len(daily_returns) < 2:
+        caveats.append("Insufficient observations (< 2 daily bars): Volatility, Sharpe, and Sortino ratios are undefined.")
+    elif ann_vol is None or ann_vol <= 1e-6:
+        caveats.append("Zero portfolio volatility observed: Sharpe ratio is undefined.")
+
+    if tot_trades == 0:
+        caveats.append("Zero closed trades executed: Win rate, profit factor, and trade payoff statistics are not applicable.")
+
+    if cagr_net is None and total_bars <= 20:
+        caveats.append("CAGR undefined: Minimum 20 trading bars required for annualized return calculation.")
+    elif total_bars < 252:
+        caveats.append("Annualized return (CAGR) extrapolated from short simulation duration (< 1 year / 252 bars); treat with caution.")
 
     return BacktestMetricsReport(
         initial_capital=initial_capital,
