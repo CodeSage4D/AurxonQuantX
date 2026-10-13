@@ -17,6 +17,9 @@
 | **ADR-04** | **Data Provenance & Classification** | Accepted | All quotes and filings must carry explicit classification (`LIVE_EXCHANGE`, `DELAYED_EXCHANGE`, `THIRD_PARTY_DELAYED`, `CACHED_LOCAL`, `HISTORICAL_FILING`, `SYNTHETIC_BENCHMARK`, `UNAVAILABLE`). Scraping aggregators (Yahoo Finance) is never represented as official exchange tick feeds. |
 | **ADR-05** | **Banking Sector Valuation Guard** | Accepted | Commercial Banks (`HDFCBANK`, `ICICIBANK`, `SBIN`) hold deposits as liabilities and lack traditional working capital and enterprise FCF. Suppressed Altman Z and industrial DCF for banks to prevent false distress alerts. |
 | **ADR-06** | **Zero Credential Harvesting & Trading Hard Lock** | Accepted | Real-money trading is hard-locked (`ENABLE_REAL_TRADING = false`). Screen companion uses regex redaction to strip OTPs, passwords, and card numbers before processing. |
+| **ADR-07** | **Untrusted Document Ingestion & Injection Neutralization** | Accepted | Ingested PDFs and HTML filings are strictly treated as untrusted text. Active prompt injection directives (`Ignore instructions...`, `SYSTEM OVERRIDE`) are scrubbed and quarantined before reaching model synthesis. |
+| **ADR-08** | **Deterministic Mutual Fund Overlap & Direct Drag Math** | Accepted | Scheme overlap is computed as $\sum \min(w_{A,i}, w_{B,i})$. Direct vs Regular compounding expense savings are evaluated deterministically over 10-year horizons with zero LLM guesswork. |
+| **ADR-09** | **7-Point Multi-Dimensional IPO Decision Framework** | Accepted | IPO evaluation strictly decouples business quality from IPO valuation and separates listing-day speculation from long-term ownership, forbidding any speculative listing gain promises. |
 
 ---
 
@@ -48,18 +51,33 @@
   - **Workstream F:** Cryptographic hash-chain ledger in SQLite WAL mode; `/api/v1/audit/integrity` endpoint; tampering detection verified.
   - **Workstream G:** Desktop and screen companion permission clarity verified; 33 passing automated tests.
 
+### Phase 2: IPO Prospectus Intelligence + Mutual Fund & ETF Research
+- **Status:** Complete & Signed Off (All Gates Passed)
+- **Deliverables:**
+  - `backend/app/sources/registry.py` & `docs/source_registry.md`: Source governance registry (SEBI, NSE, AMFI, AMC Factsheets, DRHP/RHP, Aggregators).
+  - `backend/app/ingestion/parser.py` & `docs/document_ingestion_spec.md`: Untrusted PDF/HTML parser with prompt-injection defense and table extraction.
+  - `backend/app/ipo/analyzer.py` & `docs/ipo_research_spec.md`: Deterministic IPO structure, dilution %, promoter holding shift, financial CAGR, valuation peer comparisons, and 7-point decision matrix with curated ground truth benchmarks (`BAJAJHFL`, `TATATECH`).
+  - `backend/app/funds/analyzer.py` & `docs/mutual_fund_etf_research_spec.md`: Mutual fund CAGR, rolling returns, portfolio overlap math, 10Y Direct vs Regular compounding savings, ETF tracking error, and goal-based asset allocation proposals.
+  - FastAPI REST Endpoints: `/api/v1/sources`, `/api/v1/ingestion/upload`, `/api/v1/ipo/list`, `/api/v1/ipo/analyze/{symbol}`, `/api/v1/funds/list`, `/api/v1/funds/compare`, `/api/v1/funds/allocate`, `/api/v1/export/report`.
+  - Frontend React/TS components: `IPOResearchView.tsx`, `FundResearchView.tsx`, `SourcesInspectionModal.tsx`, and Markdown dossier export.
+  - 52 passing automated tests in 1.47s; clean production bundle build in 2.15s.
+
 ---
 
 ## 3. Test Matrix Summary
 
 ```
-======================== 33 passed, 1 warning in 1.92s =========================
-- test_api_endpoints.py: 6 passed (Health, Quote, Sync, Audit Records, Integrity, Companion)
+======================== 52 passed, 1 warning in 1.47s =========================
+- test_api_endpoints.py: 11 passed (Health, Quote, Sync, Audit Records, Integrity, Companion, Sources, IPO, Funds, Export, Ingestion Upload)
 - test_audit_ledger.py: 2 passed (Sequential Hash-Chaining, Tampering Detection)
+- test_document_ingestion.py: 2 passed (Text/HTML Ingestion with Prompt Injection, Empty/Corrupt PDF Handling)
 - test_evidence_loop.py: 4 passed (Streaming Execution, Prompt Injection Defense, Dedup, Contradictions)
+- test_fund_analyzer.py: 6 passed (CAGR Math, Portfolio Overlap, Direct Compounding Drag, Tracking Error, Fund Comparison Logic, Goal-Based Allocation)
+- test_ipo_analyzer.py: 4 passed (Arithmetic Precision, CAGR Math, Bajaj Housing Finance Dossier, Tata Technologies Dossier)
 - test_model_registry.py: 6 passed (Missing Keys, 401 Auth, Timeout, 429 Rate Limit, Bad Output, Fallback)
 - test_nse_connector.py: 4 passed (Normalization, Provenance, Bank Sector Detection, Unavailable State)
 - test_screen_ocr.py: 3 passed (Symbol Detection, Privacy Redaction, Pause Control)
+- test_source_registry.py: 2 passed (Default Sources Registered, Custom Source Registration)
 - test_valuation.py: 8 passed (Graham, DCF, Sensitivity Matrix, Bank Exclusion, Piotroski, Altman Z, Risk Metrics, Dossier)
 ```
 
@@ -68,8 +86,9 @@
 ## 4. Unresolved Risks & Next Phase Roadmap
 
 1. **Unresolved Risks:**
-   - **External API Keys:** No production OpenAI, Anthropic, or Groq API keys are currently set in `.env`. System operates cleanly using deterministic fallback demonstration mode.
-   - **Rust/WebKit2GTK Toolchain:** Building the native Linux Tauri binary requires `sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev` and the Rust toolchain. The web UI and desktop shell run immediately via Vite.
-2. **Next Milestone (Phase 2):**
-   - IPO prospectus analysis engine (DRHP/RHP extraction, anchor investor lock-in, listing-gain vs long-term scenarios).
-   - Mutual funds and portfolio factor allocation module.
+   - **External LLM Credentials:** `OPENAI_API_KEY` and `GROQ_API_KEY` remain optional. System operates reliably in offline demonstration/heuristic mode.
+   - **PDF OCR Dependency:** System uses `pypdf` for text extraction. Scanned PDFs with no embedded text streams require `pytesseract` image extraction fallback for non-searchable pages.
+2. **Next Milestone (Phase 3):**
+   - Trading research & historical backtesting module.
+   - Portfolio factor attribution and multi-asset risk parity modeling.
+   - Cross-asset correlation stress testing under historical Indian market dislocations (2008, 2020).

@@ -165,6 +165,145 @@ async def get_audit_record(audit_id: str) -> Dict[str, Any]:
     return record
 
 
+# ============================================================================
+# PHASE 2: SOURCE REGISTRY, INGESTION, IPO & MUTUAL FUND INTELLIGENCE
+# ============================================================================
+
+from fastapi import File, UploadFile
+from app.sources.registry import source_registry
+from app.ingestion.parser import document_parser, DocumentIngestionResult
+from app.ipo.analyzer import ipo_analyzer
+from app.funds.analyzer import fund_analyzer
+from app.schemas.ipo import IPODossier
+from app.schemas.funds import FundComparisonResult, PortfolioAllocationPlan
+
+
+@app.get("/api/v1/sources")
+async def list_sources():
+    """Returns registered regulatory, exchange, and filing data sources."""
+    return source_registry.list_sources()
+
+
+@app.post("/api/v1/ingestion/upload", response_model=DocumentIngestionResult)
+async def upload_document(file: UploadFile = File(...)) -> DocumentIngestionResult:
+    """Uploads DRHP/RHP PDF or HTML document, extracts sections/tables, and sanitizes untrusted input."""
+    content = await file.read()
+    filename = file.filename or "uploaded_filing.pdf"
+
+    if filename.lower().endswith(".pdf"):
+        return document_parser.parse_pdf_bytes(content, filename)
+    else:
+        text_content = content.decode("utf-8", errors="ignore")
+        return document_parser.parse_text_or_html(text_content, filename)
+
+
+@app.get("/api/v1/ipo/list")
+async def list_ipos():
+    """Lists tracked Indian IPOs available for research."""
+    return [
+        {
+            "symbol": "BAJAJHFL",
+            "issuer_name": "Bajaj Housing Finance Limited",
+            "price_band": "₹66 - ₹70",
+            "issue_size_cr": 6560.0,
+            "status": "RHP Filed / Benchmark Fixture",
+        },
+        {
+            "symbol": "TATATECH",
+            "issuer_name": "Tata Technologies Limited",
+            "price_band": "₹475 - ₹500",
+            "issue_size_cr": 3042.5,
+            "status": "Listed / Benchmark Fixture",
+        },
+    ]
+
+
+@app.get("/api/v1/ipo/analyze/{symbol_or_name}", response_model=IPODossier)
+async def analyze_ipo_endpoint(symbol_or_name: str) -> IPODossier:
+    """Produces comprehensive 7-point IPO prospectus dossier with deterministic dilution and peer valuation."""
+    dossier = ipo_analyzer.analyze_ipo(symbol_or_name)
+    return dossier
+
+
+@app.get("/api/v1/funds/list")
+async def list_funds():
+    """Lists curated Indian mutual fund and ETF benchmark schemes."""
+    return [
+        {"scheme_code": "PPFAS_FLEXI", "name": "Parag Parikh Flexi Cap Fund", "category": "FLEXI_CAP", "plan": "DIRECT"},
+        {"scheme_code": "NIFTYBEES", "name": "Nippon India ETF Nifty 50 BeES", "category": "INDEX_ETF", "plan": "DIRECT"},
+        {"scheme_code": "MIRAE_LARGE", "name": "Mirae Asset Large Cap Fund", "category": "LARGE_CAP", "plan": "DIRECT"},
+    ]
+
+
+@app.get("/api/v1/funds/compare", response_model=FundComparisonResult)
+async def compare_funds_endpoint(code_a: str = Query(default="PPFAS_FLEXI"), code_b: str = Query(default="NIFTYBEES")) -> FundComparisonResult:
+    """Compares two mutual fund/ETF schemes with mathematical portfolio overlap and direct plan savings."""
+    return fund_analyzer.compare_funds(code_a, code_b)
+
+
+class AllocationRequest(BaseModel):
+    goal_name: str = "Wealth Creation"
+    horizon_years: int = 7
+    risk_profile: str = "moderate"
+
+
+@app.post("/api/v1/funds/allocate", response_model=PortfolioAllocationPlan)
+async def allocate_portfolio_endpoint(req: AllocationRequest) -> PortfolioAllocationPlan:
+    """Generates transparent goal-based asset allocation proposal with downside stress testing."""
+    return fund_analyzer.generate_portfolio_allocation(
+        goal_name=req.goal_name,
+        horizon_years=req.horizon_years,
+        risk_profile=req.risk_profile,
+    )
+
+
+@app.get("/api/v1/export/report")
+async def export_report(
+    target_type: str = Query(default="ipo", description="equity, ipo, or allocation"),
+    identifier: str = Query(default="BAJAJHFL"),
+):
+    """Generates an exportable, auditable research dossier in Markdown and JSON formats."""
+    if target_type == "ipo":
+        dossier = ipo_analyzer.analyze_ipo(identifier)
+        md_text = f"""# AURXON IPO Research Dossier: {dossier.issuer_name}
+**Audit ID:** {dossier.audit_id}  
+**Recommendation:** {dossier.overall_recommendation.value}  
+**Price Band:** ₹{dossier.structure.price_band_floor} - ₹{dossier.structure.price_band_cap}  
+**Total Issue Size:** ₹{dossier.structure.total_issue_crores:,.1f} Cr (Fresh: ₹{dossier.structure.fresh_issue_crores:,.1f} Cr | OFS: ₹{dossier.structure.offer_for_sale_crores:,.1f} Cr)  
+**Equity Dilution:** {dossier.structure.dilution_percent}%  
+
+### 1. Business Quality Verdict
+{dossier.business_quality_verdict}
+
+### 2. Financial Quality Verdict
+{dossier.financial_quality_verdict}
+
+### 3. Valuation Verdict vs Listed Peers
+{dossier.valuation_verdict}
+
+### 4. Disclosed Material Risks ({len(dossier.risks)})
+"""
+        for r in dossier.risks:
+            md_text += f"- **[{r.severity.value}] {r.title}**: {r.description} *(Ref: Page {r.page_reference})*\n"
+
+        md_text += f"\n### 5. Listing Speculation vs Long-Term Ownership\n{dossier.listing_speculation_vs_long_term}\n"
+
+        return {
+            "target_type": "ipo",
+            "identifier": identifier,
+            "markdown_report": md_text,
+            "payload_json": dossier.model_dump(),
+        }
+    else:
+        alloc = fund_analyzer.generate_portfolio_allocation("Founder Long-Term Allocation", 7, "moderate")
+        return {
+            "target_type": "allocation",
+            "identifier": "allocation_plan",
+            "markdown_report": f"# AURXON Portfolio Allocation Plan\nEquity: {alloc.recommended_equity_pct}%\nDebt: {alloc.recommended_debt_pct}%\nGold: {alloc.recommended_gold_pct}%\nStress Drawdown: -{alloc.downside_stress_scenario_drawdown_pct}%\n",
+            "payload_json": alloc.model_dump(),
+        }
+
+
 class CompanionContextRequest(BaseModel):
     manual_text: Optional[str] = None
     paused: Optional[bool] = None
