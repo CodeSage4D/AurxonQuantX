@@ -229,4 +229,26 @@
   - Acceptance Test Suite: `backend/tests/test_phase_4_3_acceptance_audit.py` (10 passed).
 - **Milestone Decision:** **CONDITIONAL PASS** (Approved for research and paper trading; commercial tick redistribution bounded). Phase 5 remains strictly prohibited until approved.
 
+---
+
+## 7. Phase 4.4 — Portfolio Intelligence, Factor Attribution & Paper-Only Rebalancing (2026-10-13)
+
+- **Baseline Commit:** `1b02f6c` (tagged `checkpoint-phase-4-4-start`)
+- **Product Identity:** **Aurxon QuantX** (Brand: **AURXON**)
+- **Milestone Objective:** Portfolio-level intelligence, multi-portfolio accounting, time/money-weighted returns, factor attribution, paper-only rebalancing simulator, and stress testing.
+- **Delivered & Audited Capabilities:**
+  - **Workstream A — Portfolio Inventory & Multi-Portfolio Accounting:** SQLite WAL-backed portfolio isolation (`portfolio_id`), durable snapshot storage (`paper_portfolio_snapshots`), position/sector concentration metrics, Herfindahl index (HHI), and explicit `UNPRICED` handling with anti-silent-substitution enforcement.
+  - **Workstream B — Portfolio Performance:** Geometric Time-Weighted Return (TWR) compounding across cash flows, Money-Weighted Return (MWR / IRR) Bisection solver, annualized volatility ($\times \sqrt{252}$), peak-to-trough max drawdown, tracking error vs NIFTY 50 ($\sigma(R_p - R_b) \times \sqrt{252}$), and Information Ratio.
+  - **Workstream C — Factor Attribution:** Holdings-weighted factor decomposition across 6 standardized dimensions (Market Beta, Momentum 12M-1M, Value E/P, Quality ROE, Low Volatility, and Size $\ln(\text{MCap})$) calibrated against NIFTY 50 baseline medians. Explicit missing-data disclosure and correlation vs causation distinctions.
+  - **Workstream D — Paper-Only Rebalancing Simulator:** Integer share delta calculations, user-configurable position limits (max position weight, target cash reserve, min trade threshold), Indian statutory transaction cost modeling (`2024.2-STATUTORY` schedule), sell-first transaction sequencing, and virtual paper execution without broker connectivity.
+  - **Workstream E — Risk & Stress Testing:** Six reproducible deterministic stress scenarios (Market -10%/-20%, Sector IT/BFSI -15%, Single holding Black Swan -25%, Volatility Spike +50%, Liquidity Haircut -3%) and parametric 1-day Value-at-Risk (95% and 99%).
+  - **Workstream F — Premium UI & Explainability:** Unified `PortfolioIntelligenceView` React/TypeScript interface with amber paper-trading simulation banner, multi-portfolio selector, holdings inventory table, factor exposure tiles, rebalancing simulator with trade proposals, and stress test card deck.
+  - **Workstream G — Security & Execution Boundaries:** Maintained strict invariants: `ENABLE_REAL_TRADING = false`, emergency operator kill switch enforcement, zero external broker routing, and personal privacy credential redaction.
+  - **Workstream H — Validation & Acceptance:**
+    - Offline Backend Suite: **183 passed, 2 skipped** (in 3.83s).
+    - Dedicated Phase 4.4 Suite: `backend/tests/test_phase_4_4_portfolio_intelligence.py` (**13 passed** in 0.42s).
+    - Frontend Production Build: Clean compilation in 3.01s.
+- **Milestone Decision:** **PASS** (Phase 4.4 milestone fully achieved and independently verified; boundaries strictly respected). Phase 5 remains gated.
+
+
 

@@ -215,6 +215,16 @@ from app.schemas.paper_trading import (
     KillSwitchRequest,
     PaperCorporateActionRequest,
 )
+from app.schemas.portfolio_intelligence import (
+    PortfolioIntelligenceSnapshot,
+    RebalancingSimulationResult,
+    RebalanceConstraints,
+    StressScenarioResult,
+)
+from app.trading.portfolio_analytics import portfolio_analytics_engine
+from app.analytics.factor_attribution import factor_attribution_engine
+from app.trading.rebalancing import paper_rebalancing_engine
+from app.trading.stress_testing import portfolio_stress_testing_engine
 
 
 @app.get("/api/v1/sources")
@@ -593,6 +603,86 @@ async def apply_paper_corporate_action_endpoint(req: PaperCorporateActionRequest
 async def reset_paper_portfolio_endpoint(portfolio_id: str = "DEFAULT", initial_cash: float = 1000000.0) -> PaperPortfolioState:
     """Resets the virtual paper portfolio to initial cash for testing/demo scenarios."""
     return paper_manager.reset_portfolio(portfolio_id=portfolio_id, initial_cash=initial_cash)
+
+
+# ============================================================================
+# PHASE 4.4: PORTFOLIO INTELLIGENCE, FACTOR ATTRIBUTION & REBALANCING API
+# ============================================================================
+
+class CreatePortfolioRequest(BaseModel):
+    portfolio_id: str
+    name: str = "Paper Portfolio"
+    initial_cash: float = 1000000.0
+
+
+class RebalanceSimulationRequest(BaseModel):
+    portfolio_id: str = "DEFAULT"
+    target_weights: Dict[str, float]
+    constraints: Optional[RebalanceConstraints] = None
+
+
+@app.get("/api/v1/portfolio/list")
+async def list_portfolios_endpoint() -> List[Dict[str, Any]]:
+    """Returns all configured paper portfolios with active equity, cash, and drawdown."""
+    return paper_manager.list_portfolios()
+
+
+@app.post("/api/v1/portfolio/create", response_model=PaperPortfolioState)
+async def create_portfolio_endpoint(req: CreatePortfolioRequest) -> PaperPortfolioState:
+    """Creates a new simulated paper portfolio with isolated ledger and cash balance."""
+    return paper_manager.get_or_create_portfolio(
+        portfolio_id=req.portfolio_id,
+        name=req.name,
+        initial_cash=req.initial_cash,
+    )
+
+
+@app.get("/api/v1/portfolio/intelligence", response_model=PortfolioIntelligenceSnapshot)
+async def get_portfolio_intelligence_endpoint(portfolio_id: str = "DEFAULT") -> PortfolioIntelligenceSnapshot:
+    """Returns the unified portfolio intelligence package: holdings, concentration, performance, factor attribution, and stress tests."""
+    state = paper_manager.get_portfolio_state(portfolio_id=portfolio_id)
+    holdings, concentration = portfolio_analytics_engine.build_holdings_inventory(state)
+    snapshots = paper_manager.get_portfolio_snapshots(portfolio_id=portfolio_id, limit=30)
+    performance = portfolio_analytics_engine.compute_performance_dossier(state, historical_snapshots=snapshots)
+    factors = factor_attribution_engine.analyze_portfolio_factors(holdings, portfolio_id=portfolio_id)
+    stress_scenarios = portfolio_stress_testing_engine.run_all_stress_scenarios(state, holdings)
+
+    return PortfolioIntelligenceSnapshot(
+        portfolio_id=state.portfolio_id,
+        portfolio_name=state.name,
+        as_of_timestamp=datetime.now(timezone.utc).isoformat(),
+        holdings=holdings,
+        concentration=concentration,
+        performance=performance,
+        factor_attribution=factors,
+        stress_scenarios_summary=stress_scenarios,
+        data_provenance_note=state.data_provenance_note,
+    )
+
+
+@app.post("/api/v1/portfolio/rebalance/simulate", response_model=RebalancingSimulationResult)
+async def simulate_rebalance_endpoint(req: RebalanceSimulationRequest) -> RebalancingSimulationResult:
+    """Simulates multi-asset rebalancing against user targets, enforcing constraints and statutory costs."""
+    state = paper_manager.get_portfolio_state(portfolio_id=req.portfolio_id)
+    return paper_rebalancing_engine.simulate_rebalance(
+        current_state=state,
+        target_weights=req.target_weights,
+        constraints=req.constraints,
+    )
+
+
+@app.post("/api/v1/portfolio/rebalance/execute-paper")
+async def execute_paper_rebalancing_endpoint(simulation: RebalancingSimulationResult) -> List[Dict[str, Any]]:
+    """Sequentially executes the simulated rebalancing trades in the paper ledger."""
+    paper_rebalancing_engine.paper_manager = paper_manager
+    return paper_rebalancing_engine.execute_paper_rebalancing(simulation)
+
+
+@app.get("/api/v1/portfolio/snapshots")
+async def get_portfolio_snapshots_endpoint(portfolio_id: str = "DEFAULT", limit: int = 30) -> List[Dict[str, Any]]:
+    """Returns chronological snapshots of portfolio mark-to-market equity."""
+    return paper_manager.get_portfolio_snapshots(portfolio_id=portfolio_id, limit=limit)
+
 
 
 # ============================================================================

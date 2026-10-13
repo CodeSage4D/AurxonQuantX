@@ -169,6 +169,24 @@ class PaperPortfolioManager:
                 )
                 """
             )
+
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS paper_portfolio_snapshots (
+                    snapshot_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    portfolio_id TEXT NOT NULL,
+                    total_equity REAL NOT NULL,
+                    current_cash REAL NOT NULL,
+                    positions_value REAL NOT NULL,
+                    total_unrealized_pnl REAL NOT NULL,
+                    total_realized_pnl REAL NOT NULL,
+                    positions_count INTEGER NOT NULL,
+                    positions_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                )
+                """
+            )
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_snapshots_port ON paper_portfolio_snapshots(portfolio_id, created_at)")
             conn.commit()
 
     def get_or_create_portfolio(
@@ -981,6 +999,118 @@ class PaperPortfolioManager:
             )
             order_ids = [r[0] for r in cursor.fetchall()]
             return [self._get_order_by_id(conn, o_id) for o_id in order_ids]
+
+    def list_portfolios(self) -> List[Dict[str, Any]]:
+        """Returns all configured paper portfolios with active status."""
+        with sqlite3.connect(self.db_path, timeout=10.0) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT portfolio_id, name, initial_cash, current_cash, peak_equity,
+                       kill_switch_active, created_at, updated_at
+                FROM paper_portfolios ORDER BY created_at ASC
+                """
+            )
+            rows = cursor.fetchall()
+            result = []
+            for r in rows:
+                p_id, name, init_cash, curr_cash, peak_eq, kill_sw, cr_at, up_at = r
+                state = self.get_portfolio_state(p_id)
+                result.append({
+                    "portfolio_id": p_id,
+                    "name": name,
+                    "initial_cash": init_cash,
+                    "current_cash": curr_cash,
+                    "total_equity": state.total_equity,
+                    "positions_value": state.positions_value,
+                    "positions_count": len(state.positions),
+                    "peak_equity": state.peak_equity,
+                    "current_drawdown_pct": state.current_drawdown_pct,
+                    "kill_switch_active": bool(kill_sw),
+                    "created_at": cr_at,
+                    "updated_at": up_at,
+                })
+            return result
+
+    def record_portfolio_snapshot(self, portfolio_id: str = "DEFAULT") -> Dict[str, Any]:
+        """Durably persists a mark-to-market snapshot of the portfolio."""
+        state = self.get_portfolio_state(portfolio_id)
+        now_iso = datetime.now(timezone.utc).isoformat()
+        positions_summary = {
+            sym: {
+                "quantity": pos.quantity,
+                "average_cost": pos.average_cost,
+                "current_price": pos.current_price,
+                "market_value": pos.market_value,
+                "unrealized_pnl": pos.unrealized_pnl,
+            }
+            for sym, pos in state.positions.items()
+        }
+        with sqlite3.connect(self.db_path, timeout=10.0) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO paper_portfolio_snapshots
+                (portfolio_id, total_equity, current_cash, positions_value,
+                 total_unrealized_pnl, total_realized_pnl, positions_count,
+                 positions_json, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    portfolio_id,
+                    state.total_equity,
+                    state.current_cash,
+                    state.positions_value,
+                    state.total_unrealized_pnl,
+                    state.total_realized_pnl,
+                    len(state.positions),
+                    json.dumps(positions_summary),
+                    now_iso,
+                ),
+            )
+            conn.commit()
+            snap_id = cursor.lastrowid
+        return {
+            "snapshot_id": snap_id,
+            "portfolio_id": portfolio_id,
+            "total_equity": state.total_equity,
+            "current_cash": state.current_cash,
+            "positions_value": state.positions_value,
+            "positions_count": len(state.positions),
+            "created_at": now_iso,
+        }
+
+    def get_portfolio_snapshots(self, portfolio_id: str = "DEFAULT", limit: int = 30) -> List[Dict[str, Any]]:
+        """Returns chronological history of persisted portfolio snapshots."""
+        with sqlite3.connect(self.db_path, timeout=10.0) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT snapshot_id, portfolio_id, total_equity, current_cash,
+                       positions_value, total_unrealized_pnl, total_realized_pnl,
+                       positions_count, positions_json, created_at
+                FROM paper_portfolio_snapshots
+                WHERE portfolio_id = ?
+                ORDER BY created_at DESC LIMIT ?
+                """,
+                (portfolio_id, limit),
+            )
+            rows = cursor.fetchall()
+            return [
+                {
+                    "snapshot_id": r[0],
+                    "portfolio_id": r[1],
+                    "total_equity": r[2],
+                    "current_cash": r[3],
+                    "positions_value": r[4],
+                    "total_unrealized_pnl": r[5],
+                    "total_realized_pnl": r[6],
+                    "positions_count": r[7],
+                    "positions": json.loads(r[8]),
+                    "created_at": r[9],
+                }
+                for r in reversed(rows)
+            ]
 
     # ------------------------------------------------------------------------
     # INTERNAL HELPERS

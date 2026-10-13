@@ -9,12 +9,13 @@ import { ValuationCard } from './components/ValuationCard';
 import { EvidenceFeed } from './components/EvidenceFeed';
 import { ScreenCompanionWidget } from './components/ScreenCompanionWidget';
 import { AuditLedgerModal } from './components/AuditLedgerModal';
+import { SourcesInspectionModal } from './components/SourcesInspectionModal';
 import { IPOResearchView } from './components/IPOResearchView';
 import { FundResearchView } from './components/FundResearchView';
 import { PaperTradingView } from './components/PaperTradingView';
 import { ModelInventoryView } from './components/ModelInventoryView';
 import { CompanyResearchView } from './components/CompanyResearchView';
-import { SourcesInspectionModal } from './components/SourcesInspectionModal';
+import { PortfolioIntelligenceView } from './components/PortfolioIntelligenceView';
 import {
   Shield,
   FileCheck2,
@@ -31,9 +32,10 @@ import {
   Sun,
   Moon,
   Laptop,
+  Sliders,
 } from 'lucide-react';
 
-type TabView = 'EQUITIES' | 'COMPANY_RESEARCH' | 'IPO' | 'MUTUAL_FUNDS' | 'PAPER_TRADING' | 'MODELS';
+type TabView = 'EQUITIES' | 'COMPANY_RESEARCH' | 'PORTFOLIO_INTELLIGENCE' | 'IPO' | 'MUTUAL_FUNDS' | 'PAPER_TRADING' | 'MODELS';
 type ThemePreference = 'GLACIER' | 'NEON' | 'SYSTEM';
 
 
@@ -165,10 +167,10 @@ export const App: React.FC = () => {
             <span className="brand-logo-glyph">QX</span>
           </div>
           <div className="brand-title-wrap">
-            <span className="brand-title-main">QuantX</span>
-            <span className="brand-title-sub">for Aurxon</span>
+            <span className="brand-title-main">Aurxon QuantX</span>
+            <span className="brand-title-sub">PORTFOLIO INTELLIGENCE</span>
           </div>
-          <span className="brand-badge">PHASE 4.3 AUDITED</span>
+          <span className="brand-badge">PHASE 4.4 PORTFOLIO</span>
         </div>
 
         {/* View Switcher Tabs */}
@@ -180,6 +182,14 @@ export const App: React.FC = () => {
             style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
           >
             <Layers size={14} /> Equities Hub
+          </button>
+          <button
+            type="button"
+            className={`chip-btn ${activeTab === 'PORTFOLIO_INTELLIGENCE' ? 'active' : ''}`}
+            onClick={() => setActiveTab('PORTFOLIO_INTELLIGENCE')}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+          >
+            <Sliders size={14} /> Portfolio Intelligence
           </button>
           <button
             type="button"
@@ -396,6 +406,13 @@ export const App: React.FC = () => {
       {activeTab === 'COMPANY_RESEARCH' && (
         <main style={{ padding: '24px', maxWidth: '1400px', margin: '0 auto', width: '100%' }}>
           <CompanyResearchView />
+        </main>
+      )}
+
+      {/* Tab: Portfolio Intelligence & Rebalancing */}
+      {activeTab === 'PORTFOLIO_INTELLIGENCE' && (
+        <main style={{ padding: '24px', maxWidth: '1440px', margin: '0 auto', width: '100%' }}>
+          <PortfolioIntelligenceView />
         </main>
       )}
 
