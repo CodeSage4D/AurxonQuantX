@@ -36,8 +36,10 @@ MAX_CONCURRENT_TASKS = 4
 
 # Security: Prompt Injection / Untrusted Directive Patterns
 UNTRUSTED_INJECTION_PATTERNS = [
-    re.compile(r"ignore\s+(all\s+)?(previous|prior)\s+instructions", re.IGNORECASE),
-    re.compile(r"system\s+prompt\s+override", re.IGNORECASE),
+    re.compile(r"ignore\s+(all\s+)?(previous|prior|all)\s+(instructions|directives|rules|prompts|risk\s+factors)", re.IGNORECASE),
+    re.compile(r"disregard\s+(all\s+)?(previous|prior)\s+(instructions|rules)", re.IGNORECASE),
+    re.compile(r"system\s+(prompt\s+)?override", re.IGNORECASE),
+    re.compile(r"you\s+are\s+now\s+in\s+developer\s+mode", re.IGNORECASE),
     re.compile(r"<script.*?>.*?</script>", re.IGNORECASE | re.DOTALL),
     re.compile(r"javascript:\S+", re.IGNORECASE),
 ]

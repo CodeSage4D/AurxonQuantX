@@ -55,6 +55,33 @@ class DocumentIngestionResult(BaseModel):
     error_message: Optional[str] = None
 
 
+def parse_indian_number(text: str) -> Optional[float]:
+    """Parses Indian numbering format, accounting parentheses, and currency prefixes.
+    Examples:
+        '(1,234.50)' -> -1234.50
+        '₹ 3,560.00 Cr' -> 3560.0
+        '12,34,567.89' -> 1234567.89
+    """
+    if not text or not text.strip():
+        return None
+    cleaned = text.strip()
+    is_negative = False
+    if cleaned.startswith("(") and cleaned.endswith(")"):
+        is_negative = True
+        cleaned = cleaned[1:-1].strip()
+    elif cleaned.startswith("-"):
+        is_negative = True
+        cleaned = cleaned[1:].strip()
+
+    cleaned = re.sub(r"[₹$€£\s]|INR|Rs\.?|Crores?|Cr\.?|Lakhs?|Lac\.?|Mn|Million", "", cleaned, flags=re.IGNORECASE)
+    cleaned = cleaned.replace(",", "")
+    try:
+        val = float(cleaned)
+        return -val if is_negative else val
+    except ValueError:
+        return None
+
+
 class DocumentParser:
     """Robust document parsing engine treating all inputs as untrusted data."""
 
@@ -113,12 +140,18 @@ class DocumentParser:
             )
 
             status = "SUCCESS" if sections else "FAILED"
+            err_msg = (
+                None
+                if sections
+                else "Scanned PDF detected: no digital text layer found. System OCR pipeline required for image-based documents."
+            )
             return DocumentIngestionResult(
                 metadata=metadata,
                 sections=sections,
                 tables=tables,
                 detected_injection_attempts=injections_found,
                 extraction_status=status,
+                error_message=err_msg,
             )
 
         except Exception as exc:

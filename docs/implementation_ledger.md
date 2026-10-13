@@ -62,12 +62,23 @@
   - Frontend React/TS components: `IPOResearchView.tsx`, `FundResearchView.tsx`, `SourcesInspectionModal.tsx`, and Markdown dossier export.
   - 52 passing automated tests in 1.47s; clean production bundle build in 2.15s.
 
+### Phase 2.1: Independent Validation Gate
+- **Status:** Complete & Signed Off (All 6 Workstreams Verified)
+- **Deliverables:**
+  - `docs/phase_2_1_validation_report.md`: Executive gate assessment and workstream summaries.
+  - `docs/fixture_provenance_audit.md`: Sourced ledger for all IPO, mutual fund, ETF, and stock fixtures.
+  - `docs/ipo_quantitative_reference_tests.md`: Mathematical references for issue split, dilution, CAGR limits, and promoter bounds.
+  - `docs/fund_quantitative_reference_tests.md`: Mathematical references for CAGR, tracking error, direct savings, overlap, and IDCW discipline.
+  - `docs/document_extraction_accuracy.md`: Searchable vs scanned PDF boundaries, Indian numbers, accounting parentheses, and prompt injection defense.
+  - `docs/phase_2_1_issue_register.md`: 9 audit findings logged and 100% resolved.
+  - 66 passing automated tests in 1.62s; clean production bundle build in 2.08s.
+
 ---
 
 ## 3. Test Matrix Summary
 
 ```
-======================== 52 passed, 1 warning in 1.47s =========================
+======================== 66 passed, 1 warning in 1.62s =========================
 - test_api_endpoints.py: 11 passed (Health, Quote, Sync, Audit Records, Integrity, Companion, Sources, IPO, Funds, Export, Ingestion Upload)
 - test_audit_ledger.py: 2 passed (Sequential Hash-Chaining, Tampering Detection)
 - test_document_ingestion.py: 2 passed (Text/HTML Ingestion with Prompt Injection, Empty/Corrupt PDF Handling)
@@ -76,6 +87,9 @@
 - test_ipo_analyzer.py: 4 passed (Arithmetic Precision, CAGR Math, Bajaj Housing Finance Dossier, Tata Technologies Dossier)
 - test_model_registry.py: 6 passed (Missing Keys, 401 Auth, Timeout, 429 Rate Limit, Bad Output, Fallback)
 - test_nse_connector.py: 4 passed (Normalization, Provenance, Bank Sector Detection, Unavailable State)
+- test_phase_2_1_extraction_security.py: 4 passed (Accounting Parentheses, Scanned PDF Diagnostic, Upload Size Cap, Injection Defense)
+- test_phase_2_1_fund_math.py: 5 passed (CAGR Reference, Direct Savings, Tracking Error Tolerance, Overlap Math, Benchmark Alignment)
+- test_phase_2_1_ipo_math.py: 5 passed (Issue Structure & Dilution, Promoter Bounds, CAGR Limits, Negative EPS, Bajaj Cross-Check)
 - test_screen_ocr.py: 3 passed (Symbol Detection, Privacy Redaction, Pause Control)
 - test_source_registry.py: 2 passed (Default Sources Registered, Custom Source Registration)
 - test_valuation.py: 8 passed (Graham, DCF, Sensitivity Matrix, Bank Exclusion, Piotroski, Altman Z, Risk Metrics, Dossier)
@@ -87,7 +101,7 @@
 
 1. **Unresolved Risks:**
    - **External LLM Credentials:** `OPENAI_API_KEY` and `GROQ_API_KEY` remain optional. System operates reliably in offline demonstration/heuristic mode.
-   - **PDF OCR Dependency:** System uses `pypdf` for text extraction. Scanned PDFs with no embedded text streams require `pytesseract` image extraction fallback for non-searchable pages.
+   - **Multi-Page Scanned PDF OCR:** Ingestion pipeline supports searchable PDFs. Scanned image-only PDFs return explicit diagnostic failure messages; full multi-page optical OCR pipeline deferred to Phase 4 toolchain enhancements.
 2. **Next Milestone (Phase 3):**
    - Trading research & historical backtesting module.
    - Portfolio factor attribution and multi-asset risk parity modeling.

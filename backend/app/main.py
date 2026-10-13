@@ -184,10 +184,19 @@ async def list_sources():
     return source_registry.list_sources()
 
 
+MAX_UPLOAD_SIZE_BYTES = 50 * 1024 * 1024  # 50 MB
+
+
 @app.post("/api/v1/ingestion/upload", response_model=DocumentIngestionResult)
 async def upload_document(file: UploadFile = File(...)) -> DocumentIngestionResult:
     """Uploads DRHP/RHP PDF or HTML document, extracts sections/tables, and sanitizes untrusted input."""
-    content = await file.read()
+    content = await file.read(MAX_UPLOAD_SIZE_BYTES + 1)
+    if len(content) > MAX_UPLOAD_SIZE_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Uploaded file exceeds maximum allowed limit of {MAX_UPLOAD_SIZE_BYTES // (1024 * 1024)} MB",
+        )
+
     filename = file.filename or "uploaded_filing.pdf"
 
     if filename.lower().endswith(".pdf"):
