@@ -28,6 +28,10 @@ class MockResearchAdapter(BaseModelAdapter):
     def is_available(self) -> bool:
         return True
 
+    @property
+    def is_demonstration(self) -> bool:
+        return True
+
     async def extract_evidence_claims(
         self, objective: ResearchObjective, market_data: Dict[str, Any]
     ) -> List[EvidenceClaim]:

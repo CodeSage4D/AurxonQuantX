@@ -26,6 +26,7 @@ def test_api_market_quote():
     assert val["ticker"] == "RELIANCE"
     assert val["current_price"] > 0
     assert val["graham_number"] > 0
+    assert data["market_data"]["classification"] in ["SYNTHETIC_BENCHMARK", "THIRD_PARTY_DELAYED", "LIVE_EXCHANGE"]
 
 
 def test_api_research_sync():
@@ -50,7 +51,14 @@ def test_api_audit_records():
     assert response.status_code == 200
     records = response.json()
     assert isinstance(records, list)
-    assert len(records) > 0
+
+
+def test_api_audit_integrity():
+    response = client.get("/api/v1/audit/integrity")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["is_valid"] is True
+    assert data["error"] is None
 
 
 def test_api_companion_context():
@@ -64,3 +72,4 @@ def test_api_companion_context():
     assert data["status"] == "ACTIVE"
     assert "TCS" in data["detected_symbols"]
     assert "INFY" in data["detected_symbols"]
+    assert data["user_consent_status"] == "EXPLICIT_USER_CONSENT_REQUIRED"

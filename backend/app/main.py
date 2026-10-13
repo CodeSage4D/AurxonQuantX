@@ -140,8 +140,20 @@ async def sync_research(
 
 @app.get("/api/v1/audit/records")
 async def list_audit_records(limit: int = 50) -> List[Dict[str, Any]]:
-    """Retrieves immutable records from the SQLite audit ledger."""
+    """Retrieves records from the cryptographic audit ledger."""
     return audit_ledger.list_records(limit=limit)
+
+
+@app.get("/api/v1/audit/integrity")
+async def verify_audit_integrity() -> Dict[str, Any]:
+    """Verifies the cryptographic hash-chain integrity of the entire audit trail."""
+    is_valid, count, err = audit_ledger.verify_chain_integrity()
+    return {
+        "is_valid": is_valid,
+        "records_verified": count,
+        "error": err,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 @app.get("/api/v1/audit/records/{audit_id}")

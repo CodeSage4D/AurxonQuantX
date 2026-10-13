@@ -19,16 +19,19 @@ export interface DeterministicValuation {
   ticker: string;
   currency: string;
   current_price: number;
-  fair_value_dcf: number;
-  dcf_upside_percent: number;
+  fair_value_dcf?: number | null;
+  dcf_upside_percent?: number | null;
   graham_number: number;
   graham_upside_percent: number;
   pe_ratio: number;
   pb_ratio: number;
   piotroski_f_score: number;
-  altman_z_score: number;
+  altman_z_score?: number | null;
   dividend_yield_percent: number;
   is_undervalued: boolean;
+  is_financial_institution?: boolean;
+  sector_exclusion_notes?: string | null;
+  dcf_sensitivity_matrix?: Record<string, Record<string, number>> | null;
   calculation_timestamp: string;
   formula_signatures: Record<string, string>;
 }

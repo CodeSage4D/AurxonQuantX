@@ -1,23 +1,33 @@
 import React, { useEffect, useState } from 'react';
 import { AuditRecordSummary } from '../types';
-import { FileText, X, Hash } from 'lucide-react';
+import { FileText, X, Hash, ShieldCheck, AlertTriangle } from 'lucide-react';
 
 interface Props {
   isOpen: boolean;
   onClose: () => void;
 }
 
+interface IntegrityReport {
+  is_valid: boolean;
+  records_verified: number;
+  error?: string | null;
+}
+
 export const AuditLedgerModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const [records, setRecords] = useState<AuditRecordSummary[]>([]);
+  const [integrity, setIntegrity] = useState<IntegrityReport | null>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
       setLoading(true);
-      fetch('/api/v1/audit/records?limit=30')
-        .then((res) => res.json())
-        .then((data) => {
-          setRecords(data);
+      Promise.all([
+        fetch('/api/v1/audit/records?limit=30').then((r) => r.json()),
+        fetch('/api/v1/audit/integrity').then((r) => r.json()),
+      ])
+        .then(([recordsData, integrityData]) => {
+          setRecords(recordsData);
+          setIntegrity(integrityData);
           setLoading(false);
         })
         .catch(() => {
@@ -48,7 +58,7 @@ export const AuditLedgerModal: React.FC<Props> = ({ isOpen, onClose }) => {
       <div
         className="glass-card"
         style={{
-          width: '900px',
+          width: '950px',
           maxHeight: '85vh',
           background: 'hsl(222, 28%, 9%)',
           border: '1px solid var(--border-card)',
@@ -57,7 +67,7 @@ export const AuditLedgerModal: React.FC<Props> = ({ isOpen, onClose }) => {
         <div className="card-header">
           <div className="card-title">
             <FileText size={20} style={{ color: 'var(--accent-cyan)' }} />
-            <span>Immutable Audit Ledger (SQLite + SHA-256)</span>
+            <span>Cryptographic Chained Audit Ledger</span>
           </div>
           <button
             type="button"
@@ -70,9 +80,38 @@ export const AuditLedgerModal: React.FC<Props> = ({ isOpen, onClose }) => {
         </div>
 
         <div className="card-body" style={{ overflowY: 'auto' }}>
+          {/* Cryptographic Integrity Status Banner */}
+          {integrity && (
+            <div
+              style={{
+                marginBottom: '16px',
+                padding: '10px 14px',
+                borderRadius: 'var(--radius-sm)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                background: integrity.is_valid ? 'hsla(145, 80%, 42%, 0.12)' : 'hsla(0, 85%, 60%, 0.12)',
+                border: `1px solid ${integrity.is_valid ? 'var(--status-verified)' : 'var(--status-contradicted)'}`,
+                fontSize: '0.8rem',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: integrity.is_valid ? 'var(--status-verified)' : 'var(--status-contradicted)' }}>
+                {integrity.is_valid ? <ShieldCheck size={16} /> : <AlertTriangle size={16} />}
+                <strong>
+                  {integrity.is_valid
+                    ? `HASH-CHAIN VERIFIED: All ${integrity.records_verified} sequential records intact.`
+                    : `TAMPER DETECTED: Chain integrity failed! ${integrity.error}`}
+                </strong>
+              </div>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.7rem', color: 'var(--text-dim)' }}>
+                SHA-256 SEQUENTIAL CASCADE
+              </span>
+            </div>
+          )}
+
           {loading ? (
             <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
-              Loading cryptographic ledger records...
+              Verifying cryptographic hash chain...
             </div>
           ) : records.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-dim)' }}>
@@ -88,7 +127,7 @@ export const AuditLedgerModal: React.FC<Props> = ({ isOpen, onClose }) => {
                   <th style={{ padding: '8px 10px' }}>PRICE</th>
                   <th style={{ padding: '8px 10px' }}>DCF VALUE</th>
                   <th style={{ padding: '8px 10px' }}>EVIDENCE SCORE</th>
-                  <th style={{ padding: '8px 10px' }}>SHA-256 HASH</th>
+                  <th style={{ padding: '8px 10px' }}>CHAINED HASH</th>
                 </tr>
               </thead>
               <tbody>
@@ -102,7 +141,9 @@ export const AuditLedgerModal: React.FC<Props> = ({ isOpen, onClose }) => {
                       <span className={`badge rec-${rec.recommendation}`}>{rec.recommendation}</span>
                     </td>
                     <td style={{ padding: '10px', fontFamily: 'var(--font-mono)' }}>₹{rec.current_price.toFixed(2)}</td>
-                    <td style={{ padding: '10px', fontFamily: 'var(--font-mono)' }}>₹{rec.fair_value_dcf.toFixed(2)}</td>
+                    <td style={{ padding: '10px', fontFamily: 'var(--font-mono)' }}>
+                      {rec.fair_value_dcf != null ? `₹${rec.fair_value_dcf.toFixed(2)}` : 'N/A'}
+                    </td>
                     <td style={{ padding: '10px', fontFamily: 'var(--font-mono)' }}>
                       {Math.round(rec.evidence_score * 100)}%
                     </td>

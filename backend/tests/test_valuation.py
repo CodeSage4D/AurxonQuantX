@@ -1,5 +1,6 @@
-"""Unit tests for deterministic financial valuation and risk calculations.
-Verifies reproducibility, mathematical accuracy, and zero-hallucination guarantees.
+"""Unit tests for deterministic financial valuation, boundary conditions,
+sector exclusions, and DCF sensitivity matrices.
+Enforces Workstream E: Financial Validation.
 """
 
 import math
@@ -11,12 +12,11 @@ from app.analytics.valuation import (
     calculate_piotroski_f_score,
     calculate_risk_metrics,
     compute_deterministic_valuation_dossier,
+    generate_dcf_sensitivity_matrix,
 )
 
 
 def test_graham_number_calculation():
-    # Benchmark: EPS = 100, BVPS = 500
-    # Expected: sqrt(22.5 * 100 * 500) = sqrt(1,125,000) = ~1060.66
     graham = calculate_graham_number(eps=100.0, bvps=500.0)
     expected = math.sqrt(22.5 * 100.0 * 500.0)
     assert round(graham, 2) == round(expected, 2)
@@ -28,7 +28,6 @@ def test_graham_number_calculation():
 
 
 def test_dcf_fair_value_calculation():
-    # Test realistic parameters: FCF = 1000 Cr, Shares = 10 Cr, Net cash = 500 Cr, Debt = 200 Cr
     dcf = calculate_dcf_fair_value(
         fcf_latest=1000.0,
         shares_outstanding=10.0,
@@ -47,31 +46,74 @@ def test_dcf_fair_value_calculation():
     assert calculate_dcf_fair_value(fcf_latest=500.0, shares_outstanding=0.0) == 0.0
 
 
+def test_dcf_sensitivity_matrix():
+    grid = generate_dcf_sensitivity_matrix(
+        fcf_latest=1000.0,
+        shares_outstanding=10.0,
+        cash_and_equivalents=500.0,
+        total_debt=200.0,
+    )
+    # Check 3x3 dimensions
+    assert "10.5%" in grid and "11.5%" in grid and "12.5%" in grid
+    assert "3.5%" in grid["11.5%"] and "4.5%" in grid["11.5%"] and "5.5%" in grid["11.5%"]
+
+    # Higher discount rate must yield lower valuation
+    val_low_dr = grid["10.5%"]["4.5%"]
+    val_high_dr = grid["12.5%"]["4.5%"]
+    assert val_low_dr > val_high_dr
+
+    # Higher terminal growth must yield higher valuation
+    val_low_tg = grid["11.5%"]["3.5%"]
+    val_high_tg = grid["11.5%"]["5.5%"]
+    assert val_high_tg > val_low_tg
+
+
+def test_banking_sector_exclusion():
+    # HDFC Bank test: Commercial Bank must suppress Altman Z and industrial DCF
+    dossier = compute_deterministic_valuation_dossier(
+        ticker="HDFCBANK",
+        current_price=1675.0,
+        eps=84.1,
+        bvps=612.0,
+        fcf=0.0,
+        shares_outstanding=760.0,
+        cash=85000.0,
+        debt=0.0,
+        pe_ratio=19.9,
+        pb_ratio=2.7,
+        is_financial_institution=True,
+    )
+    assert dossier.is_financial_institution is True
+    assert dossier.altman_z_score is None  # Suppressed
+    assert dossier.fair_value_dcf is None  # Suppressed
+    assert dossier.dcf_sensitivity_matrix is None
+    assert dossier.sector_exclusion_notes is not None
+    assert "Commercial Banks" in dossier.sector_exclusion_notes
+    assert dossier.graham_number > 0.0  # Graham threshold still applicable
+
+
 def test_piotroski_f_score():
-    # Perfect score test (all 9 signals positive)
     perfect_metrics = {
         "net_income_current": 500.0,
-        "operating_cash_flow_current": 600.0,  # Cash Flow > Net Income
+        "operating_cash_flow_current": 600.0,
         "roa_current": 0.15,
-        "roa_prior": 0.12,  # Improved ROA
+        "roa_prior": 0.12,
         "long_term_debt_current": 100.0,
-        "long_term_debt_prior": 200.0,  # Lower debt
+        "long_term_debt_prior": 200.0,
         "current_ratio_current": 2.5,
-        "current_ratio_prior": 2.0,  # Improved current ratio
+        "current_ratio_prior": 2.0,
         "shares_current": 10.0,
-        "shares_prior": 10.0,  # No dilution
+        "shares_prior": 10.0,
         "gross_margin_current": 0.35,
-        "gross_margin_prior": 0.30,  # Improved margin
+        "gross_margin_prior": 0.30,
         "asset_turnover_current": 1.2,
-        "asset_turnover_prior": 1.0,  # Improved turnover
+        "asset_turnover_prior": 1.0,
     }
-    score = calculate_piotroski_f_score(perfect_metrics)
-    assert score == 9
+    assert calculate_piotroski_f_score(perfect_metrics) == 9
 
-    # Distressed company test (all signals negative/failing)
     failing_metrics = {
         "net_income_current": -100.0,
-        "operating_cash_flow_current": -150.0,  # Cash Flow < Net Income (fails Signal 4)
+        "operating_cash_flow_current": -150.0,
         "roa_current": -0.05,
         "roa_prior": 0.02,
         "long_term_debt_current": 500.0,
@@ -79,14 +121,13 @@ def test_piotroski_f_score():
         "current_ratio_current": 0.8,
         "current_ratio_prior": 1.2,
         "shares_current": 15.0,
-        "shares_prior": 10.0,  # Dilution
+        "shares_prior": 10.0,
         "gross_margin_current": 0.15,
         "gross_margin_prior": 0.25,
         "asset_turnover_current": 0.5,
         "asset_turnover_prior": 0.8,
     }
-    failing_score = calculate_piotroski_f_score(failing_metrics)
-    assert failing_score == 0
+    assert calculate_piotroski_f_score(failing_metrics) == 0
 
 
 def test_altman_z_score():
@@ -99,12 +140,10 @@ def test_altman_z_score():
         total_liabilities=1500.0,
         sales=4500.0,
     )
-    # Solvent, safe zone score (> 2.99)
     assert z > 2.99
 
 
 def test_risk_metrics():
-    # Synthetic series of 50 daily returns with mean ~ 0.1% and std ~ 1%
     import numpy as np
 
     np.random.seed(42)
@@ -129,9 +168,11 @@ def test_deterministic_valuation_dossier():
         debt=0.0,
         pe_ratio=31.25,
         pb_ratio=15.0,
+        is_financial_institution=False,
     )
     assert dossier.ticker == "TCS"
     assert dossier.currency == "INR"
     assert dossier.graham_number > 0.0
-    assert dossier.fair_value_dcf > 0.0
+    assert dossier.fair_value_dcf is not None and dossier.fair_value_dcf > 0.0
+    assert dossier.dcf_sensitivity_matrix is not None
     assert "graham_number" in dossier.formula_signatures

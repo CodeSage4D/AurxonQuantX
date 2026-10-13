@@ -43,16 +43,21 @@ class DeterministicValuation(BaseModel):
     ticker: str
     currency: str = "INR"
     current_price: float = Field(ge=0.0)
-    fair_value_dcf: float = Field(ge=0.0, description="Conservative 2-stage DCF fair value")
-    dcf_upside_percent: float = Field(description="Upside / downside percentage relative to DCF")
+    fair_value_dcf: Optional[float] = Field(default=None, description="Conservative 2-stage DCF fair value (None for Banks)")
+    dcf_upside_percent: Optional[float] = Field(default=None, description="Upside / downside percentage relative to DCF")
     graham_number: float = Field(ge=0.0, description="Classic Benjamin Graham fair value threshold")
     graham_upside_percent: float = Field(description="Upside / downside percentage relative to Graham Number")
     pe_ratio: float = Field(description="Price to Earnings ratio")
     pb_ratio: float = Field(description="Price to Book ratio")
     piotroski_f_score: int = Field(ge=0, le=9, description="Piotroski 9-point fundamental accounting score")
-    altman_z_score: float = Field(description="Altman Z-Score financial distress metric")
+    altman_z_score: Optional[float] = Field(default=None, description="Altman Z-Score (None for financial institutions)")
     dividend_yield_percent: float = Field(ge=0.0, description="Annual dividend yield percentage")
     is_undervalued: bool = Field(description="Whether price is below conservative margin-of-safety threshold")
+    is_financial_institution: bool = Field(default=False, description="Whether entity is a Bank or NBFC")
+    sector_exclusion_notes: Optional[str] = Field(default=None, description="Sector-specific model exclusion rationale")
+    dcf_sensitivity_matrix: Optional[Dict[str, Dict[str, float]]] = Field(
+        default=None, description="3x3 Discount Rate vs Terminal Growth Rate valuation grid"
+    )
     calculation_timestamp: str = Field(description="ISO 8601 calculation timestamp")
     formula_signatures: Dict[str, str] = Field(
         default_factory=dict,

@@ -91,7 +91,9 @@ class ScreenOCRCompanion:
 
         return {
             "status": "ACTIVE",
-            "ocr_engine": "Tesseract 5" if self.is_ocr_available() else "Manual/Regex",
+            "ocr_engine": "Tesseract 5 (Local Binary)" if self.is_ocr_available() else "Manual/Regex",
+            "capture_pipeline": "USER_SELECTED_WINDOW_OR_MANUAL_INPUT",
+            "user_consent_status": "EXPLICIT_USER_CONSENT_REQUIRED",
             "detected_symbols": symbols,
             "text_preview": extracted_text[:300] if extracted_text else "",
             "privacy_guard_passed": True,

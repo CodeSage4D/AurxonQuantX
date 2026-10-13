@@ -1,14 +1,16 @@
 """AURXON Market Data Connector.
 Provides verified market data for Indian equities (NSE/BSE), with rate-limiting,
 strict quote/historical separation, local disk caching, and offline synthetic test fixtures.
+Enforces Workstream B: Data Provenance Standards.
 """
 
+from datetime import datetime, timezone, timedelta
 import json
 import logging
-import os
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
+
+from app.schemas.market import DataClassification, FreshnessStatus, MarketQuote
 
 logger = logging.getLogger("aurxon.market_data")
 
@@ -19,9 +21,12 @@ CACHE_DIR.mkdir(parents=True, exist_ok=True)
 OFFLINE_BENCHMARK_FIXTURES: Dict[str, Dict[str, Any]] = {
     "RELIANCE": {
         "symbol": "RELIANCE.NS",
-        "short_name": "Reliance Industries Limited",
+        "clean_ticker": "RELIANCE",
+        "instrument_name": "Reliance Industries Limited",
+        "exchange": "NSE",
         "current_price": 2980.50,
         "currency": "INR",
+        "price_units": "INR per share",
         "eps": 105.40,
         "bvps": 1120.30,
         "fcf": 45000.0,  # INR Crores
@@ -34,8 +39,10 @@ OFFLINE_BENCHMARK_FIXTURES: Dict[str, Dict[str, Any]] = {
         "market_cap": 2014000.0,
         "52_week_high": 3217.90,
         "52_week_low": 2221.00,
-        "sector": "Energy / Oil & Gas / Retail / Telecom",
+        "sector": "Energy / Conglomerate",
+        "is_financial_institution": False,
         "last_filing_date": "2026-06-30",
+        "market_timestamp": "2026-06-30T10:00:00Z",
         "piotroski": {
             "net_income_current": 79020.0,
             "operating_cash_flow_current": 135000.0,
@@ -55,9 +62,12 @@ OFFLINE_BENCHMARK_FIXTURES: Dict[str, Dict[str, Any]] = {
     },
     "TCS": {
         "symbol": "TCS.NS",
-        "short_name": "Tata Consultancy Services Limited",
+        "clean_ticker": "TCS",
+        "instrument_name": "Tata Consultancy Services Limited",
+        "exchange": "NSE",
         "current_price": 4210.00,
         "currency": "INR",
+        "price_units": "INR per share",
         "eps": 128.50,
         "bvps": 265.80,
         "fcf": 42000.0,
@@ -71,7 +81,9 @@ OFFLINE_BENCHMARK_FIXTURES: Dict[str, Dict[str, Any]] = {
         "52_week_high": 4590.00,
         "52_week_low": 3312.00,
         "sector": "Information Technology",
+        "is_financial_institution": False,
         "last_filing_date": "2026-06-30",
+        "market_timestamp": "2026-06-30T10:00:00Z",
         "piotroski": {
             "net_income_current": 46500.0,
             "operating_cash_flow_current": 48000.0,
@@ -82,7 +94,7 @@ OFFLINE_BENCHMARK_FIXTURES: Dict[str, Dict[str, Any]] = {
             "current_ratio_current": 2.6,
             "current_ratio_prior": 2.4,
             "shares_current": 361.0,
-            "shares_prior": 365.0,  # Buyback reduced shares
+            "shares_prior": 365.0,
             "gross_margin_current": 0.41,
             "gross_margin_prior": 0.40,
             "asset_turnover_current": 1.80,
@@ -91,9 +103,12 @@ OFFLINE_BENCHMARK_FIXTURES: Dict[str, Dict[str, Any]] = {
     },
     "INFY": {
         "symbol": "INFY.NS",
-        "short_name": "Infosys Limited",
+        "clean_ticker": "INFY",
+        "instrument_name": "Infosys Limited",
+        "exchange": "NSE",
         "current_price": 1890.20,
         "currency": "INR",
+        "price_units": "INR per share",
         "eps": 64.30,
         "bvps": 210.50,
         "fcf": 24000.0,
@@ -107,7 +122,9 @@ OFFLINE_BENCHMARK_FIXTURES: Dict[str, Dict[str, Any]] = {
         "52_week_high": 1995.00,
         "52_week_low": 1358.00,
         "sector": "Information Technology",
+        "is_financial_institution": False,
         "last_filing_date": "2026-06-30",
+        "market_timestamp": "2026-06-30T10:00:00Z",
         "piotroski": {
             "net_income_current": 26600.0,
             "operating_cash_flow_current": 28500.0,
@@ -127,15 +144,18 @@ OFFLINE_BENCHMARK_FIXTURES: Dict[str, Dict[str, Any]] = {
     },
     "HDFCBANK": {
         "symbol": "HDFCBANK.NS",
-        "short_name": "HDFC Bank Limited",
+        "clean_ticker": "HDFCBANK",
+        "instrument_name": "HDFC Bank Limited",
+        "exchange": "NSE",
         "current_price": 1675.00,
         "currency": "INR",
+        "price_units": "INR per share",
         "eps": 84.10,
         "bvps": 612.00,
-        "fcf": 35000.0,
+        "fcf": 0.0,  # FCF is not applicable to commercial banks
         "shares_outstanding": 760.0,
         "cash": 85000.0,
-        "debt": 250000.0,
+        "debt": 0.0,  # Bank deposits are liabilities, not corporate debt
         "pe_ratio": 19.92,
         "pb_ratio": 2.74,
         "dividend_yield": 1.15,
@@ -143,29 +163,20 @@ OFFLINE_BENCHMARK_FIXTURES: Dict[str, Dict[str, Any]] = {
         "52_week_high": 1794.00,
         "52_week_low": 1363.00,
         "sector": "Banking & Financial Services",
+        "is_financial_institution": True,
         "last_filing_date": "2026-06-30",
-        "piotroski": {
-            "net_income_current": 64000.0,
-            "operating_cash_flow_current": 72000.0,
-            "roa_current": 0.019,
-            "roa_prior": 0.018,
-            "long_term_debt_current": 250000.0,
-            "long_term_debt_prior": 260000.0,
-            "current_ratio_current": 1.05,
-            "current_ratio_prior": 1.02,
-            "shares_current": 760.0,
-            "shares_prior": 760.0,
-            "gross_margin_current": 0.45,
-            "gross_margin_prior": 0.44,
-            "asset_turnover_current": 0.12,
-            "asset_turnover_prior": 0.11,
-        },
+        "market_timestamp": "2026-06-30T10:00:00Z",
+        "piotroski": None,
     },
 }
 
+FINANCIAL_INSTITUTION_KEYWORDS = [
+    "BANK", "FINANCE", "FINANCIAL", "INSURANCE", "LENDING", "NBFC", "HOUSING FINANCE"
+]
+
 
 class NSEDataConnector:
-    """Connector for fetching Indian market data with verified offline fallback."""
+    """Connector for fetching Indian market data with verified provenance and fail-safe handling."""
 
     def __init__(self, use_cache: bool = True):
         self.use_cache = use_cache
@@ -177,87 +188,153 @@ class NSEDataConnector:
             cleaned = cleaned.rsplit(".", 1)[0]
         return cleaned
 
-    def get_stock_data(self, raw_symbol: str) -> Dict[str, Any]:
-        """Retrieves verified stock data, checking cache, live sources, and benchmark fixtures."""
+    def is_financial_sector(self, clean_symbol: str, sector: Optional[str] = None) -> bool:
+        """Determines if the ticker is a commercial bank or financial institution."""
+        if any(term in clean_symbol for term in ["BANK", "FIN", "FINSERV", "FINANCE"]):
+            return True
+        if sector and any(term in sector.upper() for term in FINANCIAL_INSTITUTION_KEYWORDS):
+            return True
+        return False
+
+    def evaluate_freshness(self, retrieved_at_iso: str) -> FreshnessStatus:
+        """Computes freshness status based on timestamp age."""
+        try:
+            retrieved_dt = datetime.fromisoformat(retrieved_at_iso.replace("Z", "+00:00"))
+            age = datetime.now(timezone.utc) - retrieved_dt
+            if age < timedelta(minutes=15):
+                return FreshnessStatus.FRESH
+            elif age < timedelta(hours=24):
+                return FreshnessStatus.STALE_ACCEPTABLE
+            else:
+                return FreshnessStatus.STALE_WARNING
+        except Exception:
+            return FreshnessStatus.UNKNOWN
+
+    def get_market_quote(self, raw_symbol: str) -> MarketQuote:
+        """Retrieves verified MarketQuote schema with complete provenance metadata."""
         clean_symbol = self.normalize_symbol(raw_symbol)
         cache_file = CACHE_DIR / f"{clean_symbol}.json"
+        now_iso = datetime.now(timezone.utc).isoformat()
 
-        # 1. Attempt live yfinance fetch if permitted
-        data = None
+        # 1. Attempt live / external yfinance fetch
         try:
             import yfinance as yf
 
             yf_symbol = f"{clean_symbol}.NS"
             ticker_obj = yf.Ticker(yf_symbol)
             info = ticker_obj.info
-            if info and "currentPrice" in info or "regularMarketPrice" in info:
-                price = info.get("currentPrice") or info.get("regularMarketPrice", 0.0)
-                data = {
-                    "symbol": yf_symbol,
-                    "short_name": info.get("shortName", clean_symbol),
-                    "current_price": float(price),
-                    "currency": info.get("currency", "INR"),
-                    "eps": float(info.get("trailingEps", 0.0) or 0.0),
-                    "bvps": float(info.get("bookValue", 0.0) or 0.0),
-                    "fcf": float(info.get("freeCashflow", 0.0) or 1000.0) / 1e7,  # convert to Cr
-                    "shares_outstanding": float(info.get("sharesOutstanding", 1.0) or 1.0) / 1e7,
-                    "cash": float(info.get("totalCash", 0.0) or 0.0) / 1e7,
-                    "debt": float(info.get("totalDebt", 0.0) or 0.0) / 1e7,
-                    "pe_ratio": float(info.get("trailingPE", 20.0) or 20.0),
-                    "pb_ratio": float(info.get("priceToBook", 2.0) or 2.0),
-                    "dividend_yield": float(info.get("dividendYield", 0.0) or 0.0) * 100.0,
-                    "market_cap": float(info.get("marketCap", 0.0) or 0.0) / 1e7,
-                    "52_week_high": float(info.get("fiftyTwoWeekHigh", price * 1.1)),
-                    "52_week_low": float(info.get("fiftyTwoWeekLow", price * 0.9)),
-                    "sector": info.get("sector", "Indian Equities"),
-                    "source": "yfinance_live",
-                    "retrieved_at": datetime.now(timezone.utc).isoformat(),
-                    "piotroski": None,
-                }
-                # Save to disk cache
-                with open(cache_file, "w") as f:
-                    json.dump(data, f, indent=2)
-                return data
+            if info and ("currentPrice" in info or "regularMarketPrice" in info):
+                price = info.get("currentPrice") or info.get("regularMarketPrice")
+                if price is not None and float(price) > 0:
+                    sector = info.get("sector", "Indian Equities")
+                    is_fin = self.is_financial_institution(clean_symbol, sector)
+                    
+                    quote = MarketQuote(
+                        symbol=yf_symbol,
+                        clean_ticker=clean_symbol,
+                        instrument_name=info.get("shortName", f"{clean_symbol} Ltd"),
+                        exchange="NSE",
+                        data_provider="Yahoo Finance (Scraped Aggregator)",
+                        source_reference=f"https://finance.yahoo.com/quote/{yf_symbol}",
+                        classification=DataClassification.THIRD_PARTY_DELAYED,
+                        freshness=FreshnessStatus.FRESH,
+                        currency=info.get("currency", "INR"),
+                        price_units="INR per share",
+                        current_price=float(price),
+                        market_timestamp=now_iso,
+                        retrieval_timestamp=now_iso,
+                        eps=float(info.get("trailingEps") or 0.0),
+                        bvps=float(info.get("bookValue") or 0.0),
+                        fcf=float(info.get("freeCashflow") or 0.0) / 1e7 if not is_fin else None,
+                        shares_outstanding=float(info.get("sharesOutstanding") or 1.0) / 1e7,
+                        cash=float(info.get("totalCash") or 0.0) / 1e7,
+                        debt=float(info.get("totalDebt") or 0.0) / 1e7 if not is_fin else None,
+                        pe_ratio=float(info.get("trailingPE") or 0.0),
+                        pb_ratio=float(info.get("priceToBook") or 0.0),
+                        dividend_yield=float(info.get("dividendYield") or 0.0) * 100.0,
+                        sector=sector,
+                        is_financial_institution=is_fin,
+                        provenance_notes="Third-party aggregator quote. Disclaimers: 15-minute delayed; not an official exchange direct tick feed.",
+                    )
+                    # Cache to disk
+                    with open(cache_file, "w") as f:
+                        f.write(quote.model_dump_json(indent=2))
+                    return quote
         except Exception as exc:
-            logger.info("Live market fetch unavailable or sandboxed (%s). Falling back to cached / benchmark data.", exc)
+            logger.info("External fetch bypassed/blocked for %s (%s). Proceeding to cache / benchmark.", clean_symbol, exc)
 
-        # 2. Check disk cache
-        if cache_file.exists():
+        # 2. Check local disk cache
+        if self.use_cache and cache_file.exists():
             try:
                 with open(cache_file, "r") as f:
-                    cached_data = json.load(f)
-                    cached_data["source"] = "disk_cache"
-                    return cached_data
+                    cached_dict = json.load(f)
+                    quote = MarketQuote(**cached_dict)
+                    quote.classification = DataClassification.CACHED_LOCAL
+                    quote.freshness = self.evaluate_freshness(quote.retrieval_timestamp)
+                    quote.provenance_notes = f"Retrieved from local disk cache ({quote.retrieval_timestamp})."
+                    return quote
             except Exception:
                 pass
 
-        # 3. Check curated benchmark fixtures (offline fallback)
+        # 3. Check curated benchmark fixtures (Offline calibration)
         if clean_symbol in OFFLINE_BENCHMARK_FIXTURES:
-            fixture = dict(OFFLINE_BENCHMARK_FIXTURES[clean_symbol])
-            fixture["source"] = "offline_benchmark_fixture"
-            fixture["retrieved_at"] = datetime.now(timezone.utc).isoformat()
-            return fixture
+            f = OFFLINE_BENCHMARK_FIXTURES[clean_symbol]
+            is_fin = f.get("is_financial_institution", self.is_financial_sector(clean_symbol, f.get("sector")))
+            return MarketQuote(
+                symbol=f["symbol"],
+                clean_ticker=clean_symbol,
+                instrument_name=f["instrument_name"],
+                exchange=f.get("exchange", "NSE"),
+                data_provider="AURXON Curated Benchmark Archive (Audited Filings)",
+                source_reference=f"https://www.nseindia.com/get-quotes/equity?symbol={clean_symbol}",
+                classification=DataClassification.SYNTHETIC_BENCHMARK,
+                freshness=FreshnessStatus.OFFLINE_FROZEN,
+                currency="INR",
+                price_units="INR per share",
+                current_price=f["current_price"],
+                market_timestamp=f.get("market_timestamp"),
+                retrieval_timestamp=now_iso,
+                eps=f.get("eps"),
+                bvps=f.get("bvps"),
+                fcf=f.get("fcf") if not is_fin else None,
+                shares_outstanding=f.get("shares_outstanding"),
+                cash=f.get("cash"),
+                debt=f.get("debt") if not is_fin else None,
+                pe_ratio=f.get("pe_ratio"),
+                pb_ratio=f.get("pb_ratio"),
+                dividend_yield=f.get("dividend_yield"),
+                sector=f.get("sector", "Indian Equities"),
+                is_financial_institution=is_fin,
+                piotroski_raw=f.get("piotroski"),
+                provenance_notes="Curated benchmark fixture. Audited quarterly filings used for deterministic regression testing. NOT a live market tick.",
+            )
 
-        # 4. Deterministic default for unlisted / untested tickers
-        return {
-            "symbol": f"{clean_symbol}.NS",
-            "short_name": f"{clean_symbol} Ltd",
-            "current_price": 500.0,
-            "currency": "INR",
-            "eps": 25.0,
-            "bvps": 180.0,
-            "fcf": 1500.0,
-            "shares_outstanding": 10.0,
-            "cash": 400.0,
-            "debt": 150.0,
-            "pe_ratio": 20.0,
-            "pb_ratio": 2.78,
-            "dividend_yield": 1.2,
-            "market_cap": 5000.0,
-            "52_week_high": 580.0,
-            "52_week_low": 420.0,
-            "sector": "Indian Equities (Generic)",
-            "source": "deterministic_baseline_estimate",
-            "retrieved_at": datetime.now(timezone.utc).isoformat(),
-            "piotroski": None,
-        }
+        # 4. Unknown ticker with no network and no fixture: return UNAVAILABLE
+        return MarketQuote(
+            symbol=f"{clean_symbol}.NS",
+            clean_ticker=clean_symbol,
+            instrument_name=f"{clean_symbol} (Unverified Symbol)",
+            exchange="NSE",
+            data_provider="None",
+            source_reference="",
+            classification=DataClassification.UNAVAILABLE,
+            freshness=FreshnessStatus.UNKNOWN,
+            currency="INR",
+            price_units="INR per share",
+            current_price=None,
+            market_timestamp=None,
+            retrieval_timestamp=now_iso,
+            sector="Unknown",
+            is_financial_institution=self.is_financial_sector(clean_symbol),
+            provenance_notes="Market quote is unavailable. No network connection and symbol is absent from verified local benchmark fixtures.",
+        )
+
+    def get_stock_data(self, raw_symbol: str) -> Dict[str, Any]:
+        """Backward-compatible helper returning dictionary representation with legacy keys."""
+        quote = self.get_market_quote(raw_symbol)
+        d = quote.model_dump()
+        # Map legacy keys so existing consumers continue without breaking
+        d["short_name"] = quote.instrument_name
+        d["source"] = quote.classification.value
+        d["piotroski"] = quote.piotroski_raw
+        return d
